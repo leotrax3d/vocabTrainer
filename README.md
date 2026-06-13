@@ -29,7 +29,10 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
 - **Hintergrund- & Sperrbildschirm-Wiedergabe** über die Media Session API:
   Steuerung per Kopfhörer-/Medientasten und vom Sperrbildschirm.
 - **Sprachsteuerung** (Mikrofon): „gewusst“ hakt ab und springt weiter,
-  „weiter“ / „zurück“ blättern, „stopp“ / „los“ pausieren bzw. starten.
+  „nicht gewusst“ springt weiter ohne Haken, „nochmal“ wiederholt die
+  Vokabel, „weiter“ / „zurück“ blättern, „stopp“ / „los“ pausieren bzw.
+  starten. Die eigene Sprachausgabe wird ignoriert, damit sie keine Befehle
+  auslöst; die Erkennung startet bei Abbrüchen automatisch neu.
 - **Einzelne Vokabeln** abspielen, bearbeiten, löschen oder neu hinzufügen.
 - **Stimmen wählbar**: für Latein klingt eine *italienische* Stimme am
   natürlichsten, Deutsch separat einstellbar; Sprechtempo regelbar.
