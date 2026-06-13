@@ -1,0 +1,13 @@
+{
+  "title": "Latein · Lektion 1",
+  "vocab": [
+    { "latin": "caro", "german": "das Fleisch", "forms": "carnis, f." },
+    { "latin": "amīcus", "german": "der Freund", "forms": "amīcī, m." },
+    { "latin": "puella", "german": "das Mädchen", "forms": "puellae, f." },
+    { "latin": "bellum", "german": "der Krieg", "forms": "bellī, n." },
+    { "latin": "videre", "german": "sehen", "forms": "videō, vīdī, vīsum" },
+    { "latin": "dīcere", "german": "sagen, sprechen", "forms": "dīcō, dīxī, dictum" },
+    { "latin": "magnus", "german": "groß", "forms": "magna, magnum" },
+    { "latin": "tempus", "german": "die Zeit", "forms": "temporis, n." }
+  ]
+}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Audio-Vokabeltrainer für Latein – hören, lernen, abhaken." />
+  <meta name="theme-color" content="#D97757" />
+  <title>Vokabeltrainer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Zum Inhalt springen</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1 class="brand-title">Vokabeltrainer</h1>
+          <p class="brand-sub" id="deckTitle">Latein · Audio</p>
+        </div>
+      </div>
+      <button id="themeToggle" class="icon-btn" type="button" aria-label="Farbschema wechseln" title="Hell / Dunkel">
+        <span class="theme-icon" aria-hidden="true">☾</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+
+    <!-- Player -->
+    <section class="card player" aria-label="Wiedergabe">
+      <div class="now-playing" id="nowPlaying">
+        <p class="np-label">Bereit</p>
+        <p class="np-latin" id="npLatin">—</p>
+        <p class="np-german" id="npGerman"></p>
+        <p class="np-forms" id="npForms"></p>
+      </div>
+
+      <div class="progress" aria-hidden="true">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="progress-text" id="progressText" aria-live="polite">0 von 0</p>
+
+      <div class="controls">
+        <button id="prevBtn" class="ctrl" type="button" aria-label="Vorherige Vokabel" title="Zurück">⏮</button>
+        <button id="playBtn" class="ctrl ctrl-primary" type="button" aria-label="Abspielen">▶</button>
+        <button id="nextBtn" class="ctrl" type="button" aria-label="Nächste Vokabel" title="Weiter">⏭</button>
+      </div>
+
+      <div class="player-toggles">
+        <label class="chip"><input type="checkbox" id="shuffleToggle" /> Zufall</label>
+        <label class="chip"><input type="checkbox" id="loopToggle" /> Wiederholen</label>
+        <label class="chip"><input type="checkbox" id="readFormsToggle" /> Formen vorlesen</label>
+        <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <details class="card settings">
+      <summary>Einstellungen</summary>
+      <div class="settings-grid">
+        <div class="field">
+          <label for="pauseBetween">Pause Latein → Deutsch: <strong id="pauseBetweenVal">5,0</strong> s</label>
+          <input type="range" id="pauseBetween" min="0" max="15" step="0.5" value="5" />
+        </div>
+        <div class="field">
+          <label for="pauseAfter">Pause nach jeder Vokabel: <strong id="pauseAfterVal">1,5</strong> s</label>
+          <input type="range" id="pauseAfter" min="0" max="10" step="0.5" value="1.5" />
+        </div>
+        <div class="field">
+          <label for="rate">Sprechtempo: <strong id="rateVal">0,9</strong>×</label>
+          <input type="range" id="rate" min="0.5" max="1.5" step="0.05" value="0.9" />
+        </div>
+        <div class="field">
+          <label for="repeatLatin">Latein wiederholen: <strong id="repeatLatinVal">1</strong>×</label>
+          <input type="range" id="repeatLatin" min="1" max="3" step="1" value="1" />
+        </div>
+        <div class="field">
+          <label for="latinVoice">Stimme Latein (Aussprache)</label>
+          <select id="latinVoice"></select>
+        </div>
+        <div class="field">
+          <label for="germanVoice">Stimme Deutsch</label>
+          <select id="germanVoice"></select>
+        </div>
+      </div>
+      <p class="hint">Tipp: Für Latein klingt eine <em>italienische</em> Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play/Pause, <kbd>←</kbd>/<kbd>→</kbd> blättern.</p>
+    </details>
+
+    <!-- Vocab list -->
+    <section class="card list-card" aria-label="Vokabelliste">
+      <div class="list-head">
+        <h2>Vokabeln <span class="count-pill" id="countPill">0</span></h2>
+        <input type="search" id="searchInput" class="search" placeholder="Suchen…" aria-label="Vokabeln durchsuchen" />
+      </div>
+
+      <div class="list-toolbar">
+        <button id="addBtn" class="btn btn-soft" type="button">+ Vokabel</button>
+        <button id="checkAllBtn" class="btn btn-ghost" type="button">Alle abhaken</button>
+        <button id="uncheckAllBtn" class="btn btn-ghost" type="button">Zurücksetzen</button>
+        <span class="spacer"></span>
+        <button id="importBtn" class="btn btn-ghost" type="button">Import JSON</button>
+        <button id="exportBtn" class="btn btn-ghost" type="button">Export JSON</button>
+        <button id="sampleBtn" class="btn btn-ghost" type="button">Beispiel laden</button>
+        <input type="file" id="fileInput" accept="application/json,.json" hidden />
+      </div>
+
+      <ol class="vocab-list" id="vocabList"></ol>
+      <p class="empty-state" id="emptyState" hidden>
+        Noch keine Vokabeln. Lade ein <button class="link-btn" id="emptySample" type="button">Beispiel</button>
+        oder importiere eine JSON-Datei.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap">
+    <p>Audio-Vokabeltrainer · läuft komplett im Browser · Daten bleiben lokal gespeichert.</p>
+  </footer>
+
+  <!-- Edit / Add dialog -->
+  <dialog id="editDialog" class="edit-dialog">
+    <form method="dialog" id="editForm">
+      <h3 id="editTitle">Vokabel hinzufügen</h3>
+      <label class="dlg-field">
+        <span>Latein (Grundform)</span>
+        <input type="text" id="fLatin" required placeholder="caro" />
+      </label>
+      <label class="dlg-field">
+        <span>Deutsch (Übersetzung)</span>
+        <input type="text" id="fGerman" required placeholder="das Fleisch" />
+      </label>
+      <label class="dlg-field">
+        <span>Weitere Formen <small>(optional)</small></span>
+        <input type="text" id="fForms" placeholder="carnis, f." />
+      </label>
+      <div class="dlg-actions">
+        <button type="button" class="btn btn-ghost" id="cancelEdit">Abbrechen</button>
+        <button type="submit" class="btn btn-soft">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
