@@ -1042,7 +1042,28 @@
       .trim();
   }
   function contentTokens(s) { return foldText(s).split(" ").filter((t) => t && !STOP.has(t)); }
-  function splitVariants(s) { return (s || "").split(/[,;/]|\boder\b/i); }
+
+  // Trennt Mehrfachbedeutungen und macht Klammer-Inhalte optional:
+  // "von dort; darauf; deshalb"  -> ["von dort", "darauf", "deshalb"]
+  // "der Bürger (Einwohner)"     -> ["der Bürger", "der Bürger Einwohner", "Einwohner"]
+  function expandVariants(s) {
+    const out = [];
+    for (let part of (s || "").split(/[,;/]|\boder\b|\bbzw\.?\b/i)) {
+      part = part.trim();
+      if (!part) continue;
+      if (/[()[\]]/.test(part)) {
+        const without = part.replace(/[([][^)\]]*[)\]]/g, " ").replace(/\s+/g, " ").trim();
+        const inlined = part.replace(/[()[\]]/g, " ").replace(/\s+/g, " ").trim();
+        const inner = (part.match(/[([]([^)\]]*)[)\]]/) || [])[1];
+        if (without) out.push(without);          // ohne Klammer-Inhalt
+        if (inlined && inlined !== without) out.push(inlined); // mit Klammer-Inhalt
+        if (inner && inner.trim()) out.push(inner.trim());     // nur Klammer-Inhalt
+      } else {
+        out.push(part);
+      }
+    }
+    return out.length ? out : [s || ""];
+  }
 
   function lev(a, b) {
     const m = a.length, n = b.length;
@@ -1073,7 +1094,7 @@
     const spTokens = contentTokens(spoken);
     if (!spTokens.length) return false;
     const spPhrase = spTokens.join(" ");
-    for (const variant of splitVariants(german)) {
+    for (const variant of expandVariants(german)) {
       const vTokens = contentTokens(variant);
       if (!vTokens.length) continue;
       const vPhrase = vTokens.join(" ");
@@ -1492,7 +1513,7 @@
   }
 
   /* ---------- Ansicht wechseln ---------- */
-  const VIEWS = ["listen", "quiz", "write", "cards"];
+  const VIEWS = ["listen", "quiz", "write", "cards", "manage"];
 
   function switchView(view) {
     if (view === currentView || !VIEWS.includes(view)) return;
@@ -1508,11 +1529,13 @@
       const on = t.dataset.view === view;
       t.classList.toggle("is-active", on);
       t.setAttribute("aria-selected", String(on));
+      if (on && t.scrollIntoView) t.scrollIntoView({ inline: "center", block: "nearest" });
     });
 
     if (view === "quiz") enterQuiz();
     else if (view === "write") enterWrite();
     else if (view === "cards") enterCards();
+    else if (view === "listen" && !player.playing && player.pos < 0) setNpState("", "Bereit");
 
     updateWakeLock();
     try { localStorage.setItem("vt.view", view); } catch (e) {}
@@ -1533,9 +1556,10 @@
     loadVoices();
     renderList();
     updateProgress();
-    // Zuletzt genutzten Tab wiederherstellen
+    // Ohne Vokabeln direkt in den Vokabeln-Tab, sonst zuletzt genutzten Tab
     let lastView = "listen";
     try { lastView = localStorage.getItem("vt.view") || "listen"; } catch (e) {}
+    if (!state.vocab.length) lastView = "manage";
     if (VIEWS.includes(lastView) && lastView !== "listen") switchView(lastView);
   }
 

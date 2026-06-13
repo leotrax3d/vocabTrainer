@@ -10,8 +10,8 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
 
 ## Funktionen
 
-Vier Modi, umschaltbar über die Tabs **Hören**, **Sprechen**, **Schreiben**
-und **Karten**.
+Vier Lern-Modi über die Tabs **Hören**, **Sprechen**, **Schreiben** und
+**Karten**; im Tab **Vokabeln** werden Liste und Einstellungen verwaltet.
 
 - **Sprechen**: Es wird nur die lateinische Grundform gezeigt; du sprichst die
   deutsche Übersetzung ins Mikrofon (mit Live-Transkript). Stimmt sie, ertönt
@@ -22,8 +22,10 @@ und **Karten**.
 - **Karten**: Karteikarten zum Antippen/Umdrehen (mit Wisch-Gesten),
   „Gewusst / Noch üben“, wählbare Startseite (Latein oder Deutsch zuerst).
 - Alle Eingaben mit automatischer **Fehlertoleranz** – Tippfehler, fehlende
-  Artikel/Umlaute und Zusatzwörter (z. B. „adv adverb“ für „Adverb“) werden
-  trotzdem als richtig gewertet.
+  Artikel/Umlaute und Zusatzwörter werden verziehen (z. B. „adv adverb“ für
+  „Adverb“). Bei mehreren Bedeutungen genügt eine (z. B. „deshalb“ für
+  „von dort; darauf; deshalb“), und **Klammer-Zusätze sind optional**
+  („der Bürger“ zählt für „der Bürger (Einwohner)“).
 - **Audio-Wiedergabe** (Hören) pro Vokabel: Latein → 5 s Pause → Deutsch
   (jede Pausenlänge einzeln einstellbar).
 - **Drei Spalten** je Vokabel: lateinische Grundform, deutsche Übersetzung,
