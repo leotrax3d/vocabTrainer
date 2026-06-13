@@ -45,6 +45,12 @@
       qAuto: true,
       qWake: true,
       qSkipDone: false,
+      wDir: false,        // Schreiben: false = Latein→Deutsch, true = Deutsch→Latein
+      wShuffle: false,
+      wSkipDone: false,
+      cDir: false,        // Karten: false = Latein zuerst, true = Deutsch zuerst
+      cShuffle: false,
+      cSkipDone: false,
       theme: "light",
     },
   };
@@ -56,6 +62,12 @@
   let quizArmed = false;   // Mikrofon mind. einmal gestartet (Berechtigung erteilt)
   let currentView = "listen";
   let wakeLock = null;     // Screen Wake Lock (Bildschirm anlassen)
+
+  // Schreiben-Modus
+  const write = { order: [], pos: -1, answered: false, correctCount: 0, completedCount: 0, finished: false };
+  // Karten-Modus
+  const cards = { order: [], pos: -1, flipped: false };
+  let cardSwiped = false, cardTouchX = 0, cardTouchY = 0;
 
   const player = { playing: false, order: [], pos: -1, currentId: null, cancel: false, timer: null };
 
@@ -107,6 +119,19 @@
     qShuffleToggle: $("qShuffleToggle"), qAutoToggle: $("qAutoToggle"),
     qWakeToggle: $("qWakeToggle"), qSkipDoneToggle: $("qSkipDoneToggle"),
     qScore: $("qScore"), qEmptyState: $("qEmptyState"),
+    // Schreiben
+    wProgress: $("wProgress"), wHint: $("wHint"), wPrompt: $("wPrompt"), wHear: $("wHear"),
+    wForm: $("wForm"), wInput: $("wInput"), wCheckBtn: $("wCheckBtn"),
+    wStatus: $("wStatus"), wAnswer: $("wAnswer"), wSolveBtn: $("wSolveBtn"), wNextBtn: $("wNextBtn"),
+    wDirToggle: $("wDirToggle"), wShuffleToggle: $("wShuffleToggle"), wSkipDoneToggle: $("wSkipDoneToggle"),
+    wScore: $("wScore"), wEmptyState: $("wEmptyState"),
+    // Karten
+    cProgress: $("cProgress"), flashcard: $("flashcard"), flashInner: $("flashInner"),
+    cFrontLabel: $("cFrontLabel"), cFront: $("cFront"), cHearFront: $("cHearFront"),
+    cBackLabel: $("cBackLabel"), cBack: $("cBack"), cForms: $("cForms"),
+    cPrevBtn: $("cPrevBtn"), cUnknownBtn: $("cUnknownBtn"), cKnownBtn: $("cKnownBtn"), cNextBtn: $("cNextBtn"),
+    cDirToggle: $("cDirToggle"), cShuffleToggle: $("cShuffleToggle"), cSkipDoneToggle: $("cSkipDoneToggle"),
+    cScore: $("cScore"), cEmptyState: $("cEmptyState"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -825,6 +850,12 @@
     el.qAutoToggle.checked = s.qAuto;
     el.qWakeToggle.checked = s.qWake;
     el.qSkipDoneToggle.checked = s.qSkipDone;
+    el.wDirToggle.checked = s.wDir;
+    el.wShuffleToggle.checked = s.wShuffle;
+    el.wSkipDoneToggle.checked = s.wSkipDone;
+    el.cDirToggle.checked = s.cDir;
+    el.cShuffleToggle.checked = s.cShuffle;
+    el.cSkipDoneToggle.checked = s.cSkipDone;
     applyTheme(s.theme);
   }
 
@@ -840,6 +871,10 @@
     el.nextBtn.innerHTML = ICON.next;
     el.qMicBtn.innerHTML = ICON.mic;
     el.qHearLatin.innerHTML = ICON.speaker;
+    el.wHear.innerHTML = ICON.speaker;
+    el.cHearFront.innerHTML = ICON.speaker;
+    el.cPrevBtn.innerHTML = ICON.prev;
+    el.cNextBtn.innerHTML = ICON.next;
 
     el.playBtn.addEventListener("click", togglePlay);
     el.prevBtn.addEventListener("click", () => jump(-1));
@@ -902,14 +937,22 @@
         else if (e.key && e.key.toLowerCase() === "l") { e.preventDefault(); quizReveal(); }
         return;
       }
+      if (currentView === "cards") {
+        if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flipCard(); }
+        else if (e.code === "ArrowLeft") { e.preventDefault(); cardsPrev(); }
+        else if (e.code === "ArrowRight") { e.preventDefault(); cardsNext(); }
+        else if (e.key && e.key.toLowerCase() === "k") { e.preventDefault(); cardsMark(true); }
+        else if (e.key && e.key.toLowerCase() === "j") { e.preventDefault(); cardsMark(false); }
+        return;
+      }
+      if (currentView === "write") return; // Tastatur über das Eingabefeld/Formular
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       else if (e.code === "ArrowRight") { e.preventDefault(); jump(1); }
       else if (e.code === "ArrowLeft") { e.preventDefault(); jump(-1); }
     });
 
     // Tabs
-    el.tabListen.addEventListener("click", () => switchView("listen"));
-    el.tabQuiz.addEventListener("click", () => switchView("quiz"));
+    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
 
     // Quiz-Steuerung
     el.qMicBtn.addEventListener("click", () => { quiz.listening ? quizStopListen() : quizListen(); });
@@ -927,6 +970,33 @@
     qToggle(el.qAutoToggle, "qAuto", false);
     qToggle(el.qSkipDoneToggle, "qSkipDone", true);
     el.qWakeToggle.addEventListener("change", () => { state.settings.qWake = el.qWakeToggle.checked; save(); updateWakeLock(); });
+
+    // Schreiben-Steuerung
+    el.wForm.addEventListener("submit", (e) => { e.preventDefault(); writeCheck(); });
+    el.wSolveBtn.addEventListener("click", writeReveal);
+    el.wNextBtn.addEventListener("click", writeNext);
+    el.wHear.addEventListener("click", writeHear);
+    const wToggle = (chk, key) => chk.addEventListener("change", () => { state.settings[key] = chk.checked; save(); if (currentView === "write") enterWrite(); });
+    wToggle(el.wDirToggle, "wDir");
+    wToggle(el.wShuffleToggle, "wShuffle");
+    wToggle(el.wSkipDoneToggle, "wSkipDone");
+
+    // Karten-Steuerung
+    el.flashcard.addEventListener("click", () => { if (cardSwiped) { cardSwiped = false; return; } flipCard(); });
+    el.flashcard.addEventListener("touchstart", (e) => { const t = e.changedTouches[0]; cardTouchX = t.clientX; cardTouchY = t.clientY; cardSwiped = false; }, { passive: true });
+    el.flashcard.addEventListener("touchend", (e) => {
+      const t = e.changedTouches[0]; const dx = t.clientX - cardTouchX, dy = t.clientY - cardTouchY;
+      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { cardSwiped = true; if (dx < 0) cardsNext(); else cardsPrev(); }
+    }, { passive: true });
+    el.cHearFront.addEventListener("click", cardsHearFront);
+    el.cPrevBtn.addEventListener("click", cardsPrev);
+    el.cNextBtn.addEventListener("click", cardsNext);
+    el.cKnownBtn.addEventListener("click", () => cardsMark(true));
+    el.cUnknownBtn.addEventListener("click", () => cardsMark(false));
+    const cToggle = (chk, key) => chk.addEventListener("change", () => { state.settings[key] = chk.checked; save(); if (currentView === "cards") enterCards(); });
+    cToggle(el.cDirToggle, "cDir");
+    cToggle(el.cShuffleToggle, "cShuffle");
+    cToggle(el.cSkipDoneToggle, "cSkipDone");
 
     if (synth) synth.onvoiceschanged = loadVoices;
     window.addEventListener("beforeunload", () => synth && synth.cancel());
@@ -1226,24 +1296,226 @@
     if (v) speak(v.latin, state.settings.latinVoiceURI, "it-IT");
   }
 
-  /* ---------- Ansicht wechseln ---------- */
-  function switchView(view) {
-    if (view === currentView) return;
-    currentView = view;
-    const quizActive = view === "quiz";
-    el.viewListen.hidden = quizActive;
-    el.viewQuiz.hidden = !quizActive;
-    el.tabListen.classList.toggle("is-active", !quizActive);
-    el.tabQuiz.classList.toggle("is-active", quizActive);
-    el.tabListen.setAttribute("aria-selected", String(!quizActive));
-    el.tabQuiz.setAttribute("aria-selected", String(quizActive));
-    if (quizActive) {
-      enterQuiz();
-    } else {
-      quizStopListen();
-      if (synth) synth.cancel();
+  /* ============================================================
+     SCHREIBEN-MODUS
+     ============================================================ */
+  const currentWriteVocab = () => state.vocab[write.order[write.pos]];
+  const writePrompt = (v) => (state.settings.wDir ? v.german : v.latin);
+  const writeTarget = (v) => (state.settings.wDir ? v.latin : v.german);
+
+  function buildWriteOrder() {
+    let idx = state.vocab.map((_, i) => i);
+    if (state.settings.wSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
+    if (state.settings.wShuffle) {
+      for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
     }
+    write.order = idx;
+  }
+  function writeRenderEmpty() {
+    const empty = write.order.length === 0;
+    el.wEmptyState.hidden = !empty;
+    document.querySelector(".write").hidden = empty;
+  }
+  function setWStatus(t, cls) { el.wStatus.textContent = t; el.wStatus.className = "q-status" + (cls ? " " + cls : ""); }
+  function showWAnswer(t, cls) { el.wAnswer.textContent = t; el.wAnswer.className = "q-answer" + (cls ? " " + cls : ""); el.wAnswer.hidden = false; }
+  function updateWriteProgress() { el.wProgress.textContent = `${write.pos + 1} von ${write.order.length}`; }
+  function updateWriteScore() { el.wScore.innerHTML = write.completedCount ? `Richtig: <strong>${write.correctCount}</strong> von ${write.completedCount}` : ""; }
+
+  function enterWrite() {
+    write.correctCount = 0; write.completedCount = 0; write.finished = false; write.pos = -1;
+    updateWriteScore();
+    buildWriteOrder();
+    if (!write.order.length) { writeRenderEmpty(); return; }
+    el.wEmptyState.hidden = true;
+    document.querySelector(".write").hidden = false;
+    writeNext();
+  }
+
+  function writeShow() {
+    const v = currentWriteVocab(); if (!v) return;
+    write.answered = false;
+    el.wHint.textContent = state.settings.wDir ? "Übersetze ins Lateinische" : "Übersetze ins Deutsche";
+    el.wPrompt.textContent = writePrompt(v);
+    el.wInput.value = ""; el.wInput.className = "w-input"; el.wInput.disabled = false;
+    el.wAnswer.hidden = true; el.wAnswer.className = "q-answer";
+    el.wCheckBtn.textContent = "Prüfen";
+    setWStatus("Tippe die Übersetzung und drücke Enter.", "");
+    updateWriteProgress();
+    if (currentView === "write") el.wInput.focus();
+  }
+
+  function writeNext() {
+    if (synth) synth.cancel();
+    if (write.finished) { enterWrite(); return; }
+    if (!write.order.length) { buildWriteOrder(); write.pos = -1; }
+    if (!write.order.length) { writeRenderEmpty(); return; }
+    write.pos++;
+    if (write.pos >= write.order.length) { writeFinish(); return; }
+    writeShow();
+  }
+
+  function writeFinish() {
+    write.finished = true;
+    el.wPrompt.textContent = "Fertig";
+    el.wInput.value = ""; el.wInput.disabled = true; el.wAnswer.hidden = true;
+    el.wCheckBtn.textContent = "Neue Runde";
+    setWStatus(`${write.correctCount} von ${write.completedCount} richtig – „Weiter“ für neue Runde.`, "is-ok");
+    el.wProgress.textContent = `${write.order.length} von ${write.order.length}`;
+  }
+
+  function writeCheck() {
+    if (write.finished) { enterWrite(); return; }
+    if (write.answered) { writeNext(); return; }   // Enter nach Antwort = weiter
+    const v = currentWriteVocab(); if (!v) return;
+    const text = el.wInput.value.trim();
+    if (!text) return;
+    if (isGiveUp(text)) { writeReveal(); return; }
+    if (isCorrect(text, writeTarget(v))) {
+      write.answered = true;
+      write.correctCount++; write.completedCount++; updateWriteScore();
+      el.wInput.className = "w-input is-ok"; el.wInput.disabled = true;
+      el.wCheckBtn.textContent = "Weiter";
+      successTone();
+      showWAnswer(writeTarget(v), "is-ok");
+      setWStatus("Richtig! Enter für weiter.", "is-ok");
+      if (!state.settings.wDir && !v.done) { v.done = true; save(); renderList(); updateProgress(); }
+    } else {
+      el.wInput.className = "w-input is-wrong";
+      setWStatus("Noch nicht – nochmal versuchen oder „Lösung“.", "is-wrong");
+      el.wInput.select();
+    }
+  }
+
+  function writeReveal() {
+    if (write.finished) return;
+    const v = currentWriteVocab(); if (!v) return;
+    if (!write.answered) { write.completedCount++; updateWriteScore(); }
+    write.answered = true;
+    el.wInput.disabled = true; el.wInput.className = "w-input is-wrong";
+    el.wCheckBtn.textContent = "Weiter";
+    showWAnswer(writeTarget(v), "is-reveal");
+    setWStatus("Lösung – Enter für weiter.", "is-wrong");
+    failTone();
+    if (state.settings.wDir) speak(v.latin, state.settings.latinVoiceURI, "it-IT");
+    else speak(v.german, state.settings.germanVoiceURI, "de-DE");
+  }
+
+  function writeHear() {
+    const v = currentWriteVocab(); if (!v) return;
+    if (state.settings.wDir) speak(v.german, state.settings.germanVoiceURI, "de-DE");
+    else speak(v.latin, state.settings.latinVoiceURI, "it-IT");
+  }
+
+  /* ============================================================
+     KARTEN-MODUS (Flashcards)
+     ============================================================ */
+  const currentCardVocab = () => state.vocab[cards.order[cards.pos]];
+
+  function buildCardsOrder() {
+    let idx = state.vocab.map((_, i) => i);
+    if (state.settings.cSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
+    if (state.settings.cShuffle) {
+      for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+    }
+    cards.order = idx;
+  }
+  function cardsRenderEmpty() {
+    const empty = cards.order.length === 0;
+    el.cEmptyState.hidden = !empty;
+    document.querySelector(".cards").hidden = empty;
+  }
+  function updateCardsProgress() { el.cProgress.textContent = `${cards.pos + 1} von ${cards.order.length}`; }
+  function updateCardsScore() {
+    const done = state.vocab.filter((v) => v.done).length;
+    el.cScore.innerHTML = `Gelernt: <strong>${done}</strong> von ${state.vocab.length}`;
+  }
+
+  function enterCards() {
+    buildCardsOrder();
+    cards.pos = -1;
+    updateCardsScore();
+    if (!cards.order.length) { cardsRenderEmpty(); return; }
+    el.cEmptyState.hidden = true;
+    document.querySelector(".cards").hidden = false;
+    cardsNext();
+  }
+
+  function cardsShow() {
+    const v = currentCardVocab(); if (!v) return;
+    cards.flipped = false;
+    el.flashcard.classList.remove("is-flipped");
+    const frontGerman = state.settings.cDir;
+    el.cFrontLabel.textContent = frontGerman ? "Deutsch" : "Latein";
+    el.cBackLabel.textContent = frontGerman ? "Latein" : "Deutsch";
+    el.cFront.textContent = frontGerman ? v.german : v.latin;
+    el.cBack.textContent = frontGerman ? v.latin : v.german;
+    el.cForms.textContent = v.forms || "";
+    el.cForms.hidden = !v.forms;
+    updateCardsProgress();
+  }
+
+  function flipCard() { cards.flipped = !cards.flipped; el.flashcard.classList.toggle("is-flipped", cards.flipped); }
+
+  function cardsNext() {
+    if (synth) synth.cancel();
+    if (!cards.order.length) { buildCardsOrder(); cards.pos = -1; }
+    if (!cards.order.length) { cardsRenderEmpty(); return; }
+    cards.pos = (cards.pos + 1) % cards.order.length;
+    cardsShow();
+  }
+  function cardsPrev() {
+    if (synth) synth.cancel();
+    if (!cards.order.length) return;
+    cards.pos = (cards.pos - 1 + cards.order.length) % cards.order.length;
+    cardsShow();
+  }
+
+  function cardsMark(known) {
+    const v = currentCardVocab();
+    if (v && v.done !== known) { v.done = known; save(); renderList(); updateProgress(); }
+    updateCardsScore();
+    if (state.settings.cSkipDone && known) {
+      buildCardsOrder();
+      if (!cards.order.length) { cardsRenderEmpty(); return; }
+      if (cards.pos >= cards.order.length) cards.pos = 0;
+      cardsShow();              // an gleicher Position steht nun die nächste Karte
+    } else {
+      cardsNext();
+    }
+  }
+
+  function cardsHearFront(e) {
+    if (e) e.stopPropagation();
+    const v = currentCardVocab(); if (!v) return;
+    if (state.settings.cDir) speak(v.german, state.settings.germanVoiceURI, "de-DE");
+    else speak(v.latin, state.settings.latinVoiceURI, "it-IT");
+  }
+
+  /* ---------- Ansicht wechseln ---------- */
+  const VIEWS = ["listen", "quiz", "write", "cards"];
+
+  function switchView(view) {
+    if (view === currentView || !VIEWS.includes(view)) return;
+    // Globaler Teardown des alten Modus
+    pause();
+    if (recognitionOn) stopVoice();
+    quizStopListen();
+    if (synth) synth.cancel();
+
+    currentView = view;
+    VIEWS.forEach((v) => { const node = document.getElementById("view-" + v); if (node) node.hidden = v !== view; });
+    document.querySelectorAll(".tab").forEach((t) => {
+      const on = t.dataset.view === view;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", String(on));
+    });
+
+    if (view === "quiz") enterQuiz();
+    else if (view === "write") enterWrite();
+    else if (view === "cards") enterCards();
+
     updateWakeLock();
+    try { localStorage.setItem("vt.view", view); } catch (e) {}
   }
 
   /* ---------- Init ---------- */
@@ -1261,6 +1533,10 @@
     loadVoices();
     renderList();
     updateProgress();
+    // Zuletzt genutzten Tab wiederherstellen
+    let lastView = "listen";
+    try { lastView = localStorage.getItem("vt.view") || "listen"; } catch (e) {}
+    if (VIEWS.includes(lastView) && lastView !== "listen") switchView(lastView);
   }
 
   document.addEventListener("DOMContentLoaded", init);
