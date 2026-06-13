@@ -10,15 +10,21 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
 
 ## Funktionen
 
-Zwei Modi, umschaltbar über die Tabs **Hören** und **Abfrage**.
+Vier Modi, umschaltbar über die Tabs **Hören**, **Sprechen**, **Schreiben**
+und **Karten**.
 
-- **Abfrage-Modus (Sprechen)**: Es wird nur die lateinische Grundform gezeigt;
-  du sprichst die deutsche Übersetzung ins Mikrofon. Stimmt sie, ertönt ein
-  Bestätigungston; kannst du sie nicht, wird die Lösung vorgelesen. Mit
-  automatischer **Fehlertoleranz** – Tippfehler, fehlende Artikel/Umlaute und
-  Zusatzwörter (z. B. „adv adverb“ für „Adverb“) werden trotzdem als richtig
-  gewertet.
-- **Audio-Wiedergabe** pro Vokabel: Latein → 5 s Pause → Deutsch
+- **Sprechen**: Es wird nur die lateinische Grundform gezeigt; du sprichst die
+  deutsche Übersetzung ins Mikrofon (mit Live-Transkript). Stimmt sie, ertönt
+  ein Bestätigungston; kannst du sie nicht, wird die Lösung vorgelesen.
+- **Schreiben**: Vollständige schriftliche Abfrage – Übersetzung eintippen,
+  Enter zum Prüfen. Richtung **Latein → Deutsch** oder **Deutsch → Latein**,
+  mit Trefferzähler und Lösung.
+- **Karten**: Karteikarten zum Antippen/Umdrehen (mit Wisch-Gesten),
+  „Gewusst / Noch üben“, wählbare Startseite (Latein oder Deutsch zuerst).
+- Alle Eingaben mit automatischer **Fehlertoleranz** – Tippfehler, fehlende
+  Artikel/Umlaute und Zusatzwörter (z. B. „adv adverb“ für „Adverb“) werden
+  trotzdem als richtig gewertet.
+- **Audio-Wiedergabe** (Hören) pro Vokabel: Latein → 5 s Pause → Deutsch
   (jede Pausenlänge einzeln einstellbar).
 - **Drei Spalten** je Vokabel: lateinische Grundform, deutsche Übersetzung,
   weitere Formen (z. B. `carnis, f.`).
@@ -49,9 +55,20 @@ Zwei Modi, umschaltbar über die Tabs **Hören** und **Abfrage**.
 - **Helles & dunkles Design**, zurückhaltend gestaltet und voll **mobil-tauglich**.
 - **Tastatur**: `Leertaste` = Play/Pause, `←` / `→` = blättern.
 
-## Abfrage-Modus im Detail
+## Schreiben & Karten
 
-Im Tab **Abfrage** erscheint nur das lateinische Wort. Tippe auf das
+- **Schreiben**: Das Wort wird angezeigt, du tippst die Übersetzung und
+  drückst <kbd>Enter</kbd>. Bei richtiger Antwort grünes Feedback und ein
+  Ton, sonst kannst du es erneut versuchen oder „Lösung“ (wird vorgelesen).
+  Über den Schalter **Deutsch → Latein** lässt sich die Richtung umdrehen.
+- **Karten**: Tippen dreht die Karte um, Wischen blättert vor/zurück.
+  <kbd>Leertaste</kbd> dreht um, <kbd>←</kbd>/<kbd>→</kbd> blättern,
+  <kbd>K</kbd> = gewusst, <kbd>J</kbd> = noch üben. „Gewusst“ hakt die
+  Vokabel ab (mit „Gelernte überspringen“ verschwindet sie aus dem Stapel).
+
+## Sprechen-Modus im Detail
+
+Im Tab **Sprechen** erscheint nur das lateinische Wort. Tippe auf das
 Mikrofon und sag die deutsche Übersetzung:
 
 - **Live-Transkript**: Während du sprichst, wird das Erkannte in Echtzeit

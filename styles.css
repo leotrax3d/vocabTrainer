@@ -221,9 +221,9 @@ kbd {
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
 }
 .tab {
-  flex: 1 1 0; font-family: var(--sans); font-size: .92rem; font-weight: 500;
-  padding: 9px 14px; border: none; background: transparent; color: var(--text-soft);
-  border-radius: 999px; cursor: pointer; transition: background .15s, color .15s;
+  flex: 1 1 0; font-family: var(--sans); font-size: .9rem; font-weight: 500;
+  padding: 9px 10px; border: none; background: transparent; color: var(--text-soft);
+  border-radius: 999px; cursor: pointer; transition: background .15s, color .15s; white-space: nowrap;
 }
 .tab:hover { color: var(--text); }
 .tab.is-active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
@@ -281,6 +281,34 @@ kbd {
 .q-score { margin-top: 18px; font-family: var(--sans); font-size: .85rem; color: var(--text-faint); }
 .q-score strong { color: var(--green); }
 
+/* ---------- Schreiben ---------- */
+.w-form { display: flex; gap: 8px; justify-content: center; margin: 22px auto 0; max-width: 440px; }
+.w-input { flex: 1 1 auto; font-size: 1rem; }
+.w-input.is-ok { border-color: var(--green); }
+.w-input.is-wrong { border-color: var(--accent); }
+.w-controls { display: flex; justify-content: center; gap: 12px; margin-top: 16px; }
+
+/* ---------- Karten (Flashcards) ---------- */
+.cards { text-align: center; }
+.flashcard { perspective: 1200px; margin: 18px auto 4px; max-width: 460px; cursor: pointer; outline: none; }
+.flashcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius); }
+.flash-inner { position: relative; width: 100%; min-height: 230px; transition: transform .5s cubic-bezier(.2, .7, .2, 1); transform-style: preserve-3d; }
+.flashcard.is-flipped .flash-inner { transform: rotateY(180deg); }
+.flash-face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 26px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2);
+}
+.flash-back { transform: rotateY(180deg); }
+.flash-label { margin: 0; font-family: var(--sans); font-size: .7rem; text-transform: uppercase; letter-spacing: .14em; color: var(--text-faint); font-weight: 600; }
+.flash-text { margin: 0; font-family: var(--serif); font-size: 2.1rem; font-weight: 500; line-height: 1.15; letter-spacing: -.01em; }
+.flash-forms { margin: 0; font-family: var(--serif); font-style: italic; color: var(--text-faint); font-size: 1rem; }
+.flash-hear { margin-top: 2px; }
+.flash-hint { margin: 14px 0 0; font-family: var(--sans); font-size: .82rem; color: var(--text-faint); }
+.cards-controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+.cards-controls .ctrl { width: 46px; height: 46px; }
+.cards-controls .ctrl svg { width: 20px; height: 20px; }
+
 /* ---------- Footer ---------- */
 .site-footer { padding: 28px 24px 52px; text-align: center; }
 .site-footer p { font-size: .8rem; color: var(--text-faint); margin: 0; }
@@ -317,6 +345,10 @@ kbd {
   .ctrl-primary { width: 66px; height: 66px; }
   .card { padding: 20px; }
   .search { max-width: 120px; }
+  .tabs { gap: 3px; padding: 4px; }
+  .tab { font-size: .8rem; padding: 8px 4px; }
+  .q-latin { font-size: 2.1rem; }
+  .flash-text { font-size: 1.8rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -29,8 +29,10 @@
   <main id="main" class="wrap">
 
     <nav class="tabs" role="tablist" aria-label="Modus">
-      <button class="tab is-active" id="tabListen" type="button" role="tab" aria-selected="true" data-view="listen">Hören</button>
-      <button class="tab" id="tabQuiz" type="button" role="tab" aria-selected="false" data-view="quiz">Abfrage</button>
+      <button class="tab is-active" type="button" role="tab" aria-selected="true" data-view="listen">Hören</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="quiz">Sprechen</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="write">Schreiben</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="cards">Karten</button>
     </nav>
 
     <div id="view-listen" class="view">
@@ -175,6 +177,82 @@
         Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
       </p>
     </div><!-- /view-quiz -->
+
+    <div id="view-write" class="view" hidden>
+      <section class="card quiz write" aria-label="Schriftliche Abfrage">
+        <p class="q-progress" id="wProgress" aria-live="polite">0 von 0</p>
+
+        <div class="q-prompt">
+          <p class="q-hint" id="wHint">Übersetze ins Deutsche</p>
+          <p class="q-latin" id="wPrompt">—</p>
+          <button id="wHear" class="q-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
+        </div>
+
+        <form class="w-form" id="wForm">
+          <input type="text" id="wInput" class="w-input" placeholder="Übersetzung eingeben" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+          <button type="submit" id="wCheckBtn" class="btn btn-soft">Prüfen</button>
+        </form>
+
+        <p class="q-status" id="wStatus">Tippe die Übersetzung und drücke Enter.</p>
+        <p class="q-answer" id="wAnswer" hidden></p>
+
+        <div class="w-controls">
+          <button id="wSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
+          <button id="wNextBtn" class="btn btn-ghost" type="button">Weiter</button>
+        </div>
+
+        <div class="q-toggles">
+          <label class="chip"><input type="checkbox" id="wDirToggle" /> Deutsch → Latein</label>
+          <label class="chip"><input type="checkbox" id="wShuffleToggle" /> Zufall</label>
+          <label class="chip"><input type="checkbox" id="wSkipDoneToggle" /> Gelernte überspringen</label>
+        </div>
+
+        <div class="q-score" id="wScore"></div>
+      </section>
+      <p class="empty-state" id="wEmptyState" hidden>
+        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
+      </p>
+    </div><!-- /view-write -->
+
+    <div id="view-cards" class="view" hidden>
+      <section class="card cards" aria-label="Karteikarten">
+        <p class="q-progress" id="cProgress" aria-live="polite">0 von 0</p>
+
+        <div class="flashcard" id="flashcard" tabindex="0" role="button" aria-label="Karte umdrehen">
+          <div class="flash-inner" id="flashInner">
+            <div class="flash-face flash-front">
+              <p class="flash-label" id="cFrontLabel">Latein</p>
+              <p class="flash-text" id="cFront">—</p>
+              <button id="cHearFront" class="q-hear flash-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
+            </div>
+            <div class="flash-face flash-back">
+              <p class="flash-label" id="cBackLabel">Deutsch</p>
+              <p class="flash-text" id="cBack"></p>
+              <p class="flash-forms" id="cForms"></p>
+            </div>
+          </div>
+        </div>
+        <p class="flash-hint">Tippen zum Umdrehen · wischen für vor/zurück</p>
+
+        <div class="cards-controls">
+          <button id="cPrevBtn" class="ctrl" type="button" aria-label="Vorherige Karte" title="Zurück"></button>
+          <button id="cUnknownBtn" class="btn btn-ghost" type="button">Noch üben</button>
+          <button id="cKnownBtn" class="btn btn-soft" type="button">Gewusst</button>
+          <button id="cNextBtn" class="ctrl" type="button" aria-label="Nächste Karte" title="Weiter"></button>
+        </div>
+
+        <div class="q-toggles">
+          <label class="chip"><input type="checkbox" id="cDirToggle" /> Deutsch zuerst</label>
+          <label class="chip"><input type="checkbox" id="cShuffleToggle" /> Zufall</label>
+          <label class="chip"><input type="checkbox" id="cSkipDoneToggle" /> Gelernte überspringen</label>
+        </div>
+
+        <div class="q-score" id="cScore"></div>
+      </section>
+      <p class="empty-state" id="cEmptyState" hidden>
+        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
+      </p>
+    </div><!-- /view-cards -->
   </main>
 
   <footer class="site-footer wrap">
