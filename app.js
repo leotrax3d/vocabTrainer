@@ -43,6 +43,7 @@
       sort: "seq",
       qShuffle: false,
       qAuto: true,
+      qWake: true,
       qSkipDone: false,
       theme: "light",
     },
@@ -50,10 +51,11 @@
 
   // Abfrage-Modus (unabhängig vom Hören-Modus)
   const quiz = { order: [], pos: -1, currentId: null, listening: false, revealed: false,
-                 correctCount: 0, completedCount: 0, finished: false, justAnswered: false };
+                 correctCount: 0, completedCount: 0, finished: false, justAnswered: false, typing: false };
   let quizReco = null;
   let quizArmed = false;   // Mikrofon mind. einmal gestartet (Berechtigung erteilt)
   let currentView = "listen";
+  let wakeLock = null;     // Screen Wake Lock (Bildschirm anlassen)
 
   const player = { playing: false, order: [], pos: -1, currentId: null, cancel: false, timer: null };
 
@@ -99,9 +101,11 @@
     tabListen: $("tabListen"), tabQuiz: $("tabQuiz"),
     viewListen: $("view-listen"), viewQuiz: $("view-quiz"),
     qProgress: $("qProgress"), qHint: $("qHint"), qLatin: $("qLatin"), qHearLatin: $("qHearLatin"),
-    qStatus: $("qStatus"), qAnswer: $("qAnswer"),
+    qStatus: $("qStatus"), qTranscript: $("qTranscript"), qAnswer: $("qAnswer"),
     qSolveBtn: $("qSolveBtn"), qMicBtn: $("qMicBtn"), qNextBtn: $("qNextBtn"),
-    qShuffleToggle: $("qShuffleToggle"), qAutoToggle: $("qAutoToggle"), qSkipDoneToggle: $("qSkipDoneToggle"),
+    qTypeForm: $("qTypeForm"), qTypeInput: $("qTypeInput"),
+    qShuffleToggle: $("qShuffleToggle"), qAutoToggle: $("qAutoToggle"),
+    qWakeToggle: $("qWakeToggle"), qSkipDoneToggle: $("qSkipDoneToggle"),
     qScore: $("qScore"), qEmptyState: $("qEmptyState"),
   };
 
@@ -285,6 +289,23 @@
     if (s === "playing") silentAudio.play().catch(() => {});
     else silentAudio.pause();
   }
+
+  /* ---------- Wake Lock (Bildschirm anlassen) ---------- */
+  async function updateWakeLock() {
+    const want = state.settings.qWake && ("wakeLock" in navigator) &&
+                 (player.playing || currentView === "quiz");
+    try {
+      if (want && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      } else if (!want && wakeLock) {
+        const wl = wakeLock; wakeLock = null; await wl.release();
+      }
+    } catch (e) { /* nicht unterstützt oder nicht erlaubt */ }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") updateWakeLock();
+  });
 
   /* ---------- Sprachsteuerung ---------- */
   const CMD_LABEL = {
@@ -523,6 +544,7 @@
     if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     if (player.pos < 0) buildOrder();
     mediaPlaybackState("playing");
+    updateWakeLock();
     playLoop();
   }
 
@@ -532,6 +554,7 @@
     if (synth) synth.cancel();
     clearTimeout(player.timer);
     mediaPlaybackState("paused");
+    updateWakeLock();
     setNpState("", "Pausiert");
     updatePlayButton();
   }
@@ -544,6 +567,7 @@
     if (synth) synth.cancel();
     clearTimeout(player.timer);
     mediaPlaybackState("paused");
+    updateWakeLock();
     setNpState("", "Bereit");
     updatePlayButton();
     renderList();
@@ -799,6 +823,7 @@
     el.sortSelect.value = s.sort;
     el.qShuffleToggle.checked = s.qShuffle;
     el.qAutoToggle.checked = s.qAuto;
+    el.qWakeToggle.checked = s.qWake;
     el.qSkipDoneToggle.checked = s.qSkipDone;
     applyTheme(s.theme);
   }
@@ -871,6 +896,12 @@
       if (el.dialog.open) return;
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea") return;
+      if (currentView === "quiz") {
+        if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); quiz.listening ? quizStopListen() : quizListen(); }
+        else if (e.code === "ArrowRight") { e.preventDefault(); quizNext(true); }
+        else if (e.key && e.key.toLowerCase() === "l") { e.preventDefault(); quizReveal(); }
+        return;
+      }
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       else if (e.code === "ArrowRight") { e.preventDefault(); jump(1); }
       else if (e.code === "ArrowLeft") { e.preventDefault(); jump(-1); }
@@ -885,6 +916,9 @@
     el.qSolveBtn.addEventListener("click", quizReveal);
     el.qNextBtn.addEventListener("click", () => quizNext(true));
     el.qHearLatin.addEventListener("click", quizHearLatin);
+    el.qTypeForm.addEventListener("submit", (e) => { e.preventDefault(); quizCheckTyped(el.qTypeInput.value); });
+    el.qTypeInput.addEventListener("focus", () => { quiz.typing = true; quizStopListen(); });
+    el.qTypeInput.addEventListener("blur", () => { quiz.typing = false; });
     const qToggle = (chk, key, rebuild) => chk.addEventListener("change", () => {
       state.settings[key] = chk.checked; save();
       if (rebuild && currentView === "quiz") { const keepPos = quiz.pos; buildQuizOrder(); quiz.pos = Math.min(keepPos, quiz.order.length - 1); updateQuizProgress(); }
@@ -892,6 +926,7 @@
     qToggle(el.qShuffleToggle, "qShuffle", true);
     qToggle(el.qAutoToggle, "qAuto", false);
     qToggle(el.qSkipDoneToggle, "qSkipDone", true);
+    el.qWakeToggle.addEventListener("change", () => { state.settings.qWake = el.qWakeToggle.checked; save(); updateWakeLock(); });
 
     if (synth) synth.onvoiceschanged = loadVoices;
     window.addEventListener("beforeunload", () => synth && synth.cancel());
@@ -1020,6 +1055,7 @@
     if (!quiz.order.length) { quizRenderEmpty(); return; }
     el.qEmptyState.hidden = true;
     document.querySelector(".quiz").hidden = false;
+    updateWakeLock();
     quizNext(false);                  // erste Vokabel zeigen, noch nicht zuhören (Berechtigung via Tap)
   }
 
@@ -1037,7 +1073,9 @@
     quiz.justAnswered = false;
     el.qLatin.textContent = v.latin;
     el.qAnswer.hidden = true; el.qAnswer.className = "q-answer";
-    setQStatus("Sprich die deutsche Übersetzung.", "");
+    setTranscript("", false);
+    el.qTypeInput.value = "";
+    setQStatus("Sprich die deutsche Übersetzung – oder tippe sie.", "");
     updateQuizProgress();
   }
 
@@ -1102,6 +1140,11 @@
     if (quizReco) { quizReco.onend = null; try { quizReco.stop(); } catch (e) {} quizReco.onend = quizRecoEnd; }
   }
 
+  function setTranscript(text, final) {
+    el.qTranscript.textContent = text ? `„${text}“` : "";
+    el.qTranscript.classList.toggle("is-final", !!final);
+  }
+
   function quizRecoResult(e) {
     let finalText = "", interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -1109,23 +1152,30 @@
       if (r.isFinal) finalText += r[0].transcript;
       else interim += r[0].transcript;
     }
-    if (!finalText) {
-      if (interim.trim()) setQStatus(`„${interim.trim()} …“`, "is-listening");
-      return;
-    }
+    if (interim.trim()) setTranscript(interim.trim(), false); // Live-Transkript
+    if (!finalText) return;
+    setTranscript(finalText.trim(), true);
     const last = e.results[e.results.length - 1];
     const alts = [];
     for (let i = 0; i < last.length; i++) alts.push(last[i].transcript);
     quizEvaluate(alts);
   }
 
+  function quizCheckTyped(text) {
+    text = (text || "").trim();
+    if (!text || quiz.finished || quiz.revealed) return;
+    quizStopListen();
+    setTranscript(text, true);
+    quizEvaluate([text]);
+  }
+
   function quizRecoEnd() {
     quiz.listening = false;
     el.qMicBtn.classList.remove("is-listening");
     // Hände-frei: bei Stille erneut zuhören, solange im Quiz und unbeantwortet
-    if (currentView === "quiz" && state.settings.qAuto && quizArmed && !quiz.revealed && !quiz.finished && !quiz.justAnswered) {
+    if (currentView === "quiz" && state.settings.qAuto && quizArmed && !quiz.revealed && !quiz.finished && !quiz.justAnswered && !quiz.typing) {
       setTimeout(() => {
-        if (currentView === "quiz" && !quiz.listening && !quiz.revealed && !quiz.finished) quizListen();
+        if (currentView === "quiz" && !quiz.listening && !quiz.revealed && !quiz.finished && !quiz.typing) quizListen();
       }, 250);
     }
   }
@@ -1193,6 +1243,7 @@
       quizStopListen();
       if (synth) synth.cancel();
     }
+    updateWakeLock();
   }
 
   /* ---------- Init ---------- */

@@ -243,10 +243,15 @@ kbd {
 .q-hear svg { width: 18px; height: 18px; }
 .q-hear:hover { background: var(--surface-2); color: var(--accent); }
 
-.q-status { margin: 18px 0 4px; font-size: 1rem; color: var(--text-soft); min-height: 1.5em; }
+.q-status { margin: 18px 0 2px; font-size: 1rem; color: var(--text-soft); min-height: 1.5em; }
 .q-status.is-ok { color: var(--green); font-weight: 600; }
 .q-status.is-wrong { color: var(--accent); }
 .q-status.is-listening { color: var(--text); }
+.q-transcript {
+  margin: 0 auto; min-height: 1.6em; max-width: 90%; font-family: var(--serif);
+  font-size: 1.15rem; font-style: italic; color: var(--text-faint); transition: color .15s;
+}
+.q-transcript.is-final { color: var(--text-soft); font-style: normal; }
 .q-answer { margin: 4px 0 0; font-family: var(--serif); font-size: 1.4rem; }
 .q-answer.is-ok { color: var(--green); }
 .q-answer.is-reveal { color: var(--accent); }
@@ -267,6 +272,10 @@ kbd {
   50% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); }
 }
 .q-controls .btn { min-width: 92px; }
+
+.q-type { display: flex; gap: 8px; justify-content: center; margin: 20px auto 0; max-width: 380px; }
+.q-type-input { flex: 1 1 auto; }
+.q-type .btn { flex: none; }
 
 .q-toggles { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; margin-top: 22px; }
 .q-score { margin-top: 18px; font-family: var(--sans); font-size: .85rem; color: var(--text-faint); }
