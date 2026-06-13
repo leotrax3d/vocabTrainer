@@ -49,6 +49,10 @@
   let editingId = null;
   let seqCounter = 0;
   let audioCtx = null;
+  let silentAudio = null;     // hält die Media Session aktiv (Sperrbildschirm)
+  let recognition = null;     // Sprachsteuerung
+  let recognitionOn = false;
+  let lastCmd = { name: "", t: 0 };
 
   /* ---------- DOM ---------- */
   const $ = (id) => document.getElementById(id);
@@ -60,6 +64,7 @@
     prevBtn: $("prevBtn"), playBtn: $("playBtn"), nextBtn: $("nextBtn"),
     shuffleToggle: $("shuffleToggle"), loopToggle: $("loopToggle"),
     readFormsToggle: $("readFormsToggle"), beepToggle: $("beepToggle"), skipDoneToggle: $("skipDoneToggle"),
+    voiceToggle: $("voiceToggle"), voiceChip: $("voiceChip"), shareBtn: $("shareBtn"),
     pauseBetween: $("pauseBetween"), pauseBetweenVal: $("pauseBetweenVal"),
     pauseForms: $("pauseForms"), pauseFormsVal: $("pauseFormsVal"),
     pauseAfter: $("pauseAfter"), pauseAfterVal: $("pauseAfterVal"),
@@ -209,6 +214,157 @@
     });
   }
 
+  /* ---------- Media Session (Sperrbildschirm / Hintergrund) ---------- */
+  function writeStr(view, off, str) { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); }
+
+  function makeSilentWavUrl(seconds = 2) {
+    const rate = 8000, n = rate * seconds;
+    const view = new DataView(new ArrayBuffer(44 + n * 2));
+    writeStr(view, 0, "RIFF"); view.setUint32(4, 36 + n * 2, true); writeStr(view, 8, "WAVE");
+    writeStr(view, 12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true); view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    writeStr(view, 36, "data"); view.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([view], { type: "audio/wav" }));
+  }
+
+  function setupMediaSession() {
+    if (!("mediaSession" in navigator)) return;
+    silentAudio = new Audio(makeSilentWavUrl());
+    silentAudio.loop = true;
+    silentAudio.volume = 0;
+    const ms = navigator.mediaSession;
+    try {
+      ms.setActionHandler("play", () => play());
+      ms.setActionHandler("pause", () => pause());
+      ms.setActionHandler("stop", () => stop());
+      ms.setActionHandler("previoustrack", () => jump(-1));
+      ms.setActionHandler("nexttrack", () => jump(1));
+    } catch (e) { /* nicht alle Aktionen überall unterstützt */ }
+  }
+
+  function updateMediaMetadata(v) {
+    if (!("mediaSession" in navigator) || !v) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: v.latin,
+        artist: v.german,
+        album: state.title,
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  function mediaPlaybackState(s) {
+    if ("mediaSession" in navigator) { try { navigator.mediaSession.playbackState = s; } catch (e) {} }
+    if (!silentAudio) return;
+    if (s === "playing") silentAudio.play().catch(() => {});
+    else silentAudio.pause();
+  }
+
+  /* ---------- Sprachsteuerung ---------- */
+  function startVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { toast("Spracherkennung wird hier nicht unterstützt."); el.voiceToggle.checked = false; return; }
+    if (!recognition) {
+      recognition = new SR();
+      recognition.lang = "de-DE";
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.onresult = handleVoiceResult;
+      recognition.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          toast("Mikrofon-Zugriff verweigert.");
+          stopVoice();
+        }
+      };
+      recognition.onend = () => { if (recognitionOn) { try { recognition.start(); } catch (e) {} } };
+    }
+    recognitionOn = true;
+    el.voiceChip.classList.add("listening");
+    try { recognition.start(); } catch (e) {}
+    toast("Sprachsteuerung aktiv.");
+  }
+
+  function stopVoice() {
+    recognitionOn = false;
+    el.voiceToggle.checked = false;
+    el.voiceChip.classList.remove("listening");
+    if (recognition) { try { recognition.stop(); } catch (e) {} }
+  }
+
+  function handleVoiceResult(e) {
+    const res = e.results[e.results.length - 1];
+    if (!res || !res.isFinal) return;
+    const text = res[0].transcript.toLowerCase().trim();
+    runCommand(text);
+  }
+
+  function runCommand(text) {
+    // Reihenfolge: spezifischere zuerst
+    let cmd = null;
+    if (/(gewusst|gewußt|richtig|konnte|kann ich|gekonnt)/.test(text)) cmd = "known";
+    else if (/(zurück|zurueck|vorher)/.test(text)) cmd = "prev";
+    else if (/(weiterspielen|abspielen|starten|^los|play)/.test(text)) cmd = "play";
+    else if (/(stop|stopp|pause|anhalten|halt)/.test(text)) cmd = "pause";
+    else if (/(weiter|nächste|naechste|nicht|next|skip)/.test(text)) cmd = "next";
+    if (!cmd) return;
+
+    const now = Date.now();
+    if (cmd === lastCmd.name && now - lastCmd.t < 1200) return; // Doppel-Trigger vermeiden
+    lastCmd = { name: cmd, t: now };
+
+    if (cmd === "known") markCurrentKnown();
+    else if (cmd === "next") jump(1);
+    else if (cmd === "prev") jump(-1);
+    else if (cmd === "pause") pause();
+    else if (cmd === "play") play();
+  }
+
+  function markCurrentKnown() {
+    const v = state.vocab.find((x) => x.id === player.currentId);
+    if (v) { v.done = true; save(); renderList(); }
+    jump(1);
+  }
+
+  /* ---------- Teilen per Link ---------- */
+  const b64encode = (str) => btoa(unescape(encodeURIComponent(str)));
+  const b64decode = (b64) => decodeURIComponent(escape(atob(b64)));
+
+  function shareDeck() {
+    if (!state.vocab.length) { toast("Keine Vokabeln zum Teilen."); return; }
+    const compact = { t: state.title, v: state.vocab.map((x) => [x.latin, x.german, x.forms || ""]) };
+    const url = location.origin + location.pathname + "#deck=" + b64encode(JSON.stringify(compact));
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(
+        () => toast("Link in die Zwischenablage kopiert."),
+        () => window.prompt("Link kopieren:", url)
+      );
+    } else {
+      window.prompt("Link kopieren:", url);
+    }
+  }
+
+  function checkSharedDeck() {
+    const m = location.hash.match(/deck=([^&]+)/);
+    if (!m) return;
+    try {
+      const data = JSON.parse(b64decode(decodeURIComponent(m[1])));
+      const arr = (data.v || []).map(([latin, german, forms]) => ({ latin, german, forms }));
+      if (arr.length) {
+        const ok = state.vocab.length ? window.confirm("Geteilte Vokabelliste laden? Deine aktuelle Liste wird ersetzt.") : true;
+        if (ok) {
+          state.title = data.t || "Geteilte Liste";
+          seqCounter = 0;
+          state.vocab = arr.map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
+          seqCounter = state.vocab.length;
+          applyDeckTitle(); save();
+          toast(`${state.vocab.length} Vokabeln aus Link geladen.`);
+        }
+      }
+    } catch (e) { /* ungültiger Link */ }
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+
   /* ---------- Abspiel-Reihenfolge ---------- */
   function buildOrder() {
     let idx = state.vocab.map((_, i) => i);
@@ -240,6 +396,7 @@
 
       player.currentId = v.id;
       renderNowPlaying(v);
+      updateMediaMetadata(v);
       renderList();
       updateProgress();
 
@@ -299,6 +456,7 @@
     if (player.playing) return;
     if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     if (player.pos < 0) buildOrder();
+    mediaPlaybackState("playing");
     playLoop();
   }
 
@@ -307,6 +465,7 @@
     player.cancel = true;
     if (synth) synth.cancel();
     clearTimeout(player.timer);
+    mediaPlaybackState("paused");
     setNpState("", "Pausiert");
     updatePlayButton();
   }
@@ -318,6 +477,7 @@
     player.currentId = null;
     if (synth) synth.cancel();
     clearTimeout(player.timer);
+    mediaPlaybackState("paused");
     setNpState("", "Bereit");
     updatePlayButton();
     renderList();
@@ -342,6 +502,7 @@
       const v = state.vocab[player.order[player.pos]];
       player.currentId = v.id;
       renderNowPlaying(v);
+      updateMediaMetadata(v);
       renderList();
       updateProgress();
     }
@@ -485,14 +646,52 @@
     toast("Exportiert.");
   }
 
-  function importJSON(file) {
+  function splitCsvLine(line, delim) {
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) {
+        if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') { q = true; }
+      else if (ch === delim) { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return [];
+    const first = lines[0];
+    const counts = { "\t": (first.match(/\t/g) || []).length, ";": (first.match(/;/g) || []).length, ",": (first.match(/,/g) || []).length };
+    const delim = Object.keys(counts).reduce((a, b) => (counts[b] > counts[a] ? b : a), ",");
+    let rows = lines.map((l) => splitCsvLine(l, delim));
+    const head = rows[0].map((c) => c.toLowerCase().trim());
+    if (head.some((c) => /(lat|deutsch|german|übersetz|ubersetz|wort|begriff)/.test(c))) rows = rows.slice(1);
+    return rows
+      .map((c) => ({ latin: (c[0] || "").trim(), german: (c[1] || "").trim(), forms: (c[2] || "").trim() }))
+      .filter((v) => v.latin && v.german);
+  }
+
+  function importFile(file) {
     const reader = new FileReader();
     reader.onload = () => {
+      const text = String(reader.result);
+      const isCsv = /\.csv$/i.test(file.name) || !/^\s*[\[{]/.test(text);
       try {
-        const data = JSON.parse(reader.result);
-        const arr = Array.isArray(data) ? data : data.vocab;
-        if (!Array.isArray(arr)) throw new Error("Kein Vokabel-Array gefunden.");
-        if (data.title) state.title = data.title;
+        let arr, title;
+        if (isCsv) {
+          arr = parseCSV(text);
+          if (!arr.length) throw new Error("Keine Zeilen erkannt.");
+        } else {
+          const data = JSON.parse(text);
+          arr = Array.isArray(data) ? data : data.vocab;
+          if (!Array.isArray(arr)) throw new Error("Kein Vokabel-Array gefunden.");
+          title = data.title;
+        }
+        if (title) state.title = title;
         seqCounter = 0;
         state.vocab = arr.map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
         seqCounter = state.vocab.length;
@@ -500,7 +699,7 @@
         save(); renderList(); updateProgress();
         toast(`${state.vocab.length} Vokabeln importiert.`);
       } catch (err) {
-        toast("Import fehlgeschlagen: ungültige JSON-Datei.");
+        toast("Import fehlgeschlagen: Datei nicht lesbar.");
       }
     };
     reader.readAsText(file);
@@ -585,9 +784,12 @@
 
     el.exportBtn.addEventListener("click", exportJSON);
     el.importBtn.addEventListener("click", () => el.fileInput.click());
-    el.fileInput.addEventListener("change", () => { if (el.fileInput.files[0]) importJSON(el.fileInput.files[0]); el.fileInput.value = ""; });
+    el.fileInput.addEventListener("change", () => { if (el.fileInput.files[0]) importFile(el.fileInput.files[0]); el.fileInput.value = ""; });
+    el.shareBtn.addEventListener("click", shareDeck);
     el.sampleBtn.addEventListener("click", loadSample);
     el.emptySample.addEventListener("click", loadSample);
+
+    el.voiceToggle.addEventListener("change", () => { el.voiceToggle.checked ? startVoice() : stopVoice(); });
 
     el.editForm.addEventListener("submit", submitEdit);
     el.cancelEdit.addEventListener("click", () => el.dialog.close());
@@ -611,12 +813,14 @@
   function init() {
     if (!("speechSynthesis" in window)) toast("Dein Browser unterstützt keine Sprachausgabe.");
     load();
+    checkSharedDeck();
     // seqCounter hinter den höchsten geladenen Wert setzen
     seqCounter = state.vocab.reduce((m, v) => Math.max(m, (v.seq ?? 0) + 1), 0);
     updatePlayButton();
     applySettingsToUI();
     applyDeckTitle();
     bindEvents();
+    setupMediaSession();
     loadVoices();
     renderList();
     updateProgress();

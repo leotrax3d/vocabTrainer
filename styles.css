@@ -127,6 +127,12 @@ main.wrap { padding-top: 6px; padding-bottom: 6px; }
 }
 .chip input { accent-color: var(--accent); width: 15px; height: 15px; }
 .chip:has(input:checked) { color: var(--text); }
+.chip.listening { color: var(--accent); font-weight: 500; }
+.chip.listening::after {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
 
 /* ---------- Settings ---------- */
 .settings summary {
