@@ -11,8 +11,26 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
 ## Funktionen
 
 Vier Lern-Modi über die Tabs **Hören**, **Sprechen**, **Schreiben** und
-**Karten**; im Tab **Vokabeln** werden Liste und Einstellungen verwaltet.
+**Karten**; der Tab **Fortschritt** zeigt deine Auswertung, im Tab
+**Vokabeln** werden Liste und Einstellungen verwaltet.
 
+- **Hören** bleibt bewusst schlicht: einfach die Vokabeln der Reihe nach
+  anhören (Latein → Pause → Deutsch), ganz ohne Abfrage. Hier wird **nicht**
+  umsortiert – nur die Übungsmodi nutzen Spaced Repetition.
+- **Spaced Repetition (SM-2)**: In den Übungsmodi (Sprechen/Schreiben/Karten)
+  werden Vokabeln nach dem bewährten **SM-2-Algorithmus** geplant. Wörter, die
+  du sicher kannst, erscheinen immer seltener; falsch beantwortete kommen bald
+  wieder dran. Ohne „Zufall“ stehen fällige und neue Vokabeln automatisch
+  vorne.
+- **Fortschritt / Statistik**: Eigener Tab mit **Lern-Serie (Streak)**,
+  Tageswerten (gelernt, geübte Zeit, Trefferquote), **fälligen Wiederholungen**,
+  einem **Balkendiagramm der letzten 14 Tage**, einer Beherrschungs-Übersicht
+  (neu / am Lernen / gefestigt) und einer Liste der **schwierigsten Vokabeln**.
+- **Favoriten**: Jede Vokabel lässt sich mit einem **Stern** markieren. Die
+  Liste kann auf **Favoriten** (oder Offene/Gelernte) gefiltert werden, und in
+  allen Modi gibt es **„Nur Favoriten“**, um gezielt schwierige Wörter zu üben.
+- **Vibration (mobil)**: Optionales haptisches Feedback bei richtig/falsch
+  (über die Vibration-API; in den Einstellungen abschaltbar).
 - **Sprechen**: Es wird nur die lateinische Grundform gezeigt; du sprichst die
   deutsche Übersetzung ins Mikrofon (mit Live-Transkript). Stimmt sie, ertönt
   ein Bestätigungston; kannst du sie nicht, wird die Lösung vorgelesen.
@@ -67,6 +85,41 @@ Vier Lern-Modi über die Tabs **Hören**, **Sprechen**, **Schreiben** und
   <kbd>Leertaste</kbd> dreht um, <kbd>←</kbd>/<kbd>→</kbd> blättern,
   <kbd>K</kbd> = gewusst, <kbd>J</kbd> = noch üben. „Gewusst“ hakt die
   Vokabel ab (mit „Gelernte überspringen“ verschwindet sie aus dem Stapel).
+
+## Spaced Repetition & Fortschritt
+
+Die Übungsmodi (Sprechen, Schreiben, Karten) planen die Wiederholungen
+automatisch nach **SM-2** – demselben Prinzip wie Anki:
+
+- Jede richtig beantwortete Vokabel bekommt ein **größeres Intervall**
+  (1 Tag → 3 Tage → wachsend je nach „Leichtigkeit“); sie taucht dadurch
+  seltener auf.
+- Eine **falsche** Antwort setzt das Intervall zurück, sodass die Vokabel
+  bald wieder abgefragt wird.
+- Solange **„Zufall“** ausgeschaltet ist, stehen **fällige und neue**
+  Vokabeln automatisch vorne – du übst also genau das, was nötig ist. Mit
+  „Zufall“ wird die Reihenfolge wie gewohnt gemischt.
+
+Im Tab **Fortschritt** siehst du auf einen Blick:
+
+- **Lern-Serie (Streak)** – aufeinanderfolgende Tage mit Übung (inkl. Rekord).
+- **Heute**: gelernte Vokabeln, geübte Zeit und Trefferquote.
+- **Fällig heute** – wie viele Vokabeln zur Wiederholung anstehen.
+- **Diagramm der letzten 14 Tage** (richtig/falsch je Tag).
+- **Beherrschung**: Anteil *neu* / *am Lernen* / *gefestigt*.
+- **Schwierigste Vokabeln** – mit Trefferquote und Stern zum Markieren.
+
+Alle Werte liegen rein **lokal** im Browser und lassen sich jederzeit
+zurücksetzen (die Vokabeln bleiben dabei erhalten). Sie sind bewusst **nicht**
+Teil des Exports/Teilen-Links – diese enthalten weiterhin nur die Vokabeln.
+
+## Favoriten
+
+Markiere einzelne Vokabeln über das **Stern**-Symbol als schwierig/wichtig.
+In der Vokabelliste kannst du auf **Favoriten** filtern, und in jedem Modus
+(Hören, Sprechen, Schreiben, Karten) gibt es **„Nur Favoriten“**, um gezielt
+diese Wörter zu üben oder zu hören. Favoriten werden beim **Export** als
+`fav: true` mitgespeichert.
 
 ## Sprechen-Modus im Detail
 
@@ -146,6 +199,7 @@ Alternativ ohne Actions: **Settings → Pages → Source: „Deploy from a branc
 - `german` – deutsche Übersetzung (wird nach der Pause vorgelesen) — Pflicht
 - `forms` – weitere Formen, optional (nur Anzeige; auf Wunsch mit vorlesbar)
 - `done` – optional `true`/`false`, ob die Vokabel abgehakt ist
+- `fav` – optional `true`, ob die Vokabel als Favorit markiert ist
 
 Ein reines Array (ohne `title`-Hülle) wird beim Import ebenfalls akzeptiert.
 Eine Beispieldatei liegt als [`beispiel-vokabeln.json`](beispiel-vokabeln.json) bei.
