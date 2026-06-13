@@ -53,6 +53,7 @@
         <label class="chip"><input type="checkbox" id="loopToggle" /> Wiederholen</label>
         <label class="chip"><input type="checkbox" id="readFormsToggle" /> Formen vorlesen</label>
         <label class="chip"><input type="checkbox" id="beepToggle" /> Signalton</label>
+        <label class="chip" id="voiceChip"><input type="checkbox" id="voiceToggle" /> Sprachsteuerung</label>
         <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
       </div>
     </section>
@@ -90,7 +91,8 @@
           <select id="germanVoice"></select>
         </div>
       </div>
-      <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play / Pause, <kbd>←</kbd> <kbd>→</kbd> blättern.</p>
+      <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play / Pause, <kbd>←</kbd> <kbd>→</kbd> blättern.<br>
+        Sprachbefehle (Mikrofon nötig): „gewusst“ = abhaken &amp; weiter · „weiter“ / „zurück“ · „stopp“ / „los“.</p>
     </details>
 
     <!-- Vocab list -->
@@ -115,8 +117,9 @@
         <span class="spacer"></span>
         <button id="importBtn" class="btn btn-ghost" type="button">Import</button>
         <button id="exportBtn" class="btn btn-ghost" type="button">Export</button>
+        <button id="shareBtn" class="btn btn-ghost" type="button">Teilen</button>
         <button id="sampleBtn" class="btn btn-ghost" type="button">Beispiel</button>
-        <input type="file" id="fileInput" accept="application/json,.json" hidden />
+        <input type="file" id="fileInput" accept="application/json,text/csv,.json,.csv" hidden />
       </div>
 
       <ol class="vocab-list" id="vocabList"></ol>
