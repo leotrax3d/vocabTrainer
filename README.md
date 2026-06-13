@@ -54,13 +54,29 @@ Zwei Modi, umschaltbar über die Tabs **Hören** und **Abfrage**.
 Im Tab **Abfrage** erscheint nur das lateinische Wort. Tippe auf das
 Mikrofon und sag die deutsche Übersetzung:
 
+- **Live-Transkript**: Während du sprichst, wird das Erkannte in Echtzeit
+  angezeigt – du siehst sofort, was verstanden wurde.
 - **Richtig** → Bestätigungston, die Lösung wird kurz grün gezeigt, danach
   geht es automatisch weiter (die Vokabel gilt als gelernt).
 - **„Lösung“** (oder „weiß nicht“ sagen) → die Übersetzung wird vorgelesen
   und angezeigt.
+- **Tippen statt Sprechen**: Über das Eingabefeld lässt sich die Antwort auch
+  schreiben – mit derselben Fehlertoleranz. Praktisch ohne Mikrofon.
 - **Auto-Mikrofon** hört nach jeder Vokabel automatisch wieder zu (hands-free).
+- **Bildschirm anlassen** (Wake Lock) verhindert, dass sich das Display
+  abschaltet – du kannst das Gerät weglegen, ohne dass die Sitzung stoppt.
 - **Zufall** mischt die Reihenfolge, **Gelernte überspringen** blendet bereits
   abgehakte Vokabeln aus.
+- **Tastatur**: <kbd>Leertaste</kbd>/<kbd>Enter</kbd> Mikrofon, <kbd>L</kbd>
+  Lösung, <kbd>→</kbd> weiter.
+
+> Hinweis zum „im Hintergrund laufen“: Bei **komplett ausgeschaltetem
+> Display** können mobile Browser die **Spracherkennung** aus
+> Sicherheitsgründen nicht fortsetzen – das betrifft alle Web-Apps. Die
+> Option „Bildschirm anlassen“ hält das Display deshalb wach, damit die
+> Abfrage weiterläuft, wenn du das Handy nur weglegst. Reine **Audio-
+> Wiedergabe** (Tab „Hören“) läuft über die Media Session dagegen auch bei
+> gesperrtem Bildschirm weiter, soweit das Betriebssystem es zulässt.
 
 Die Fehlertoleranz vergleicht nicht stur Zeichen für Zeichen, sondern
 normalisiert die Eingabe (Kleinschreibung, Artikel/Füllwörter weg, Umlaute

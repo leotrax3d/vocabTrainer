@@ -147,6 +147,7 @@
         </div>
 
         <p class="q-status" id="qStatus">Tippe auf das Mikrofon und sprich die Übersetzung.</p>
+        <p class="q-transcript" id="qTranscript" aria-live="polite"></p>
         <p class="q-answer" id="qAnswer" hidden></p>
 
         <div class="q-controls">
@@ -155,9 +156,15 @@
           <button id="qNextBtn" class="btn btn-ghost" type="button">Weiter</button>
         </div>
 
+        <form class="q-type" id="qTypeForm">
+          <input type="text" id="qTypeInput" class="q-type-input" placeholder="… oder Antwort tippen" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+          <button type="submit" class="btn btn-ghost">Prüfen</button>
+        </form>
+
         <div class="q-toggles">
           <label class="chip"><input type="checkbox" id="qShuffleToggle" /> Zufall</label>
           <label class="chip"><input type="checkbox" id="qAutoToggle" checked /> Auto-Mikrofon</label>
+          <label class="chip"><input type="checkbox" id="qWakeToggle" checked /> Bildschirm anlassen</label>
           <label class="chip"><input type="checkbox" id="qSkipDoneToggle" /> Gelernte überspringen</label>
         </div>
 
