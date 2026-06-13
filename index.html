@@ -32,6 +32,7 @@
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="quiz">Sprechen</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="write">Schreiben</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="cards">Karten</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="stats">Fortschritt</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="manage">Vokabeln</button>
     </nav>
 
@@ -63,6 +64,7 @@
         <label class="chip"><input type="checkbox" id="beepToggle" /> Signalton</label>
         <label class="chip" id="voiceChip"><input type="checkbox" id="voiceToggle" /> Sprachsteuerung</label>
         <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
+        <label class="chip"><input type="checkbox" id="favToggle" /> Nur Favoriten</label>
       </div>
     </section>
     </div><!-- /view-listen -->
@@ -100,6 +102,9 @@
           <label for="germanVoice">Stimme Deutsch</label>
           <select id="germanVoice"></select>
         </div>
+        <div class="field field-check">
+          <label class="chip"><input type="checkbox" id="hapticsToggle" /> Vibration bei richtig/falsch (mobil)</label>
+        </div>
       </div>
       <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play / Pause, <kbd>←</kbd> <kbd>→</kbd> blättern.<br>
         Sprachbefehle (Mikrofon nötig): „gewusst“ = abhaken &amp; weiter · „nicht gewusst“ = weiter ohne Haken · „nochmal“ · „weiter“ / „zurück“ · „stopp“ / „los“.</p>
@@ -108,8 +113,14 @@
     <!-- Vocab list -->
     <section class="card list-card" aria-label="Vokabelliste">
       <div class="list-head">
-        <h2>Vokabeln <span class="count-pill" id="countPill">0</span></h2>
+        <h2>Vokabeln <span class="count-pill" id="countPill">0</span><span class="count-pill fav-pill" id="favCount" title="Favoriten"></span></h2>
         <div class="list-head-tools">
+          <select id="filterSelect" class="sort" aria-label="Liste filtern">
+            <option value="all">Alle</option>
+            <option value="fav">Favoriten</option>
+            <option value="open">Offene</option>
+            <option value="done">Gelernte</option>
+          </select>
           <select id="sortSelect" class="sort" aria-label="Liste sortieren">
             <option value="seq">Reihenfolge</option>
             <option value="latin">Latein A–Z</option>
@@ -170,6 +181,7 @@
           <label class="chip"><input type="checkbox" id="qAutoToggle" checked /> Auto-Mikrofon</label>
           <label class="chip"><input type="checkbox" id="qWakeToggle" checked /> Bildschirm anlassen</label>
           <label class="chip"><input type="checkbox" id="qSkipDoneToggle" /> Gelernte überspringen</label>
+          <label class="chip"><input type="checkbox" id="qFavToggle" /> Nur Favoriten</label>
         </div>
 
         <div class="q-score" id="qScore"></div>
@@ -207,6 +219,7 @@
           <label class="chip"><input type="checkbox" id="wDirToggle" /> Deutsch → Latein</label>
           <label class="chip"><input type="checkbox" id="wShuffleToggle" /> Zufall</label>
           <label class="chip"><input type="checkbox" id="wSkipDoneToggle" /> Gelernte überspringen</label>
+          <label class="chip"><input type="checkbox" id="wFavToggle" /> Nur Favoriten</label>
         </div>
 
         <div class="q-score" id="wScore"></div>
@@ -247,6 +260,7 @@
           <label class="chip"><input type="checkbox" id="cDirToggle" /> Deutsch zuerst</label>
           <label class="chip"><input type="checkbox" id="cShuffleToggle" /> Zufall</label>
           <label class="chip"><input type="checkbox" id="cSkipDoneToggle" /> Gelernte überspringen</label>
+          <label class="chip"><input type="checkbox" id="cFavToggle" /> Nur Favoriten</label>
         </div>
 
         <div class="q-score" id="cScore"></div>
@@ -255,6 +269,13 @@
         Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
       </p>
     </div><!-- /view-cards -->
+
+    <div id="view-stats" class="view" hidden>
+      <div id="statsContent" class="stats-content"></div>
+      <div class="stats-actions">
+        <button id="statsResetBtn" class="btn btn-ghost" type="button">Statistik zurücksetzen</button>
+      </div>
+    </div><!-- /view-stats -->
   </main>
 
   <footer class="site-footer wrap">

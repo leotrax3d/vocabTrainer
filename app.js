@@ -21,6 +21,8 @@
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>',
     mic: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11z"/></svg>',
     speaker: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 5 6.5 9H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3.5l4.5 4a1 1 0 0 0 1.7-.75V5.75A1 1 0 0 0 11 5z"/><path d="M16 8.8a4 4 0 0 1 0 6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 17.9 6.75 19.5l1-5.85L3.5 9.65l5.9-.85z"/></svg>',
+    starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 17.9 6.75 19.5l1-5.85L3.5 9.65l5.9-.85z"/></svg>',
   };
 
   /* ---------- State ---------- */
@@ -40,20 +42,34 @@
       readForms: false,
       beep: false,
       skipDone: true,
+      favOnly: false,    // Hören: nur markierte (Favoriten) abspielen
+      haptics: true,     // Vibration bei richtig/falsch (mobil)
       sort: "seq",
+      filter: "all",     // Listenfilter: all | fav | open | done
       qShuffle: false,
       qAuto: true,
       qWake: true,
       qSkipDone: false,
+      qFavOnly: false,
       wDir: false,        // Schreiben: false = Latein→Deutsch, true = Deutsch→Latein
       wShuffle: false,
       wSkipDone: false,
+      wFavOnly: false,
       cDir: false,        // Karten: false = Latein zuerst, true = Deutsch zuerst
       cShuffle: false,
       cSkipDone: false,
+      cFavOnly: false,
       theme: "light",
     },
   };
+
+  // Lernfortschritt / Statistik (geräte-lokal, nicht Teil des Exports)
+  const progress = {
+    days: {},                                   // "JJJJ-MM-TT": { correct, wrong, learned, timeMs }
+    streak: { current: 0, longest: 0, lastDay: "" },
+    totalCorrect: 0, totalWrong: 0,
+  };
+  let lastActivityTs = 0;                        // für faire Zeitmessung (Leerlauf wird gekappt)
 
   // Abfrage-Modus (unabhängig vom Hören-Modus)
   const quiz = { order: [], pos: -1, currentId: null, listening: false, revealed: false,
@@ -93,6 +109,7 @@
     prevBtn: $("prevBtn"), playBtn: $("playBtn"), nextBtn: $("nextBtn"),
     shuffleToggle: $("shuffleToggle"), loopToggle: $("loopToggle"),
     readFormsToggle: $("readFormsToggle"), beepToggle: $("beepToggle"), skipDoneToggle: $("skipDoneToggle"),
+    favToggle: $("favToggle"), hapticsToggle: $("hapticsToggle"),
     voiceToggle: $("voiceToggle"), voiceChip: $("voiceChip"), shareBtn: $("shareBtn"),
     pauseBetween: $("pauseBetween"), pauseBetweenVal: $("pauseBetweenVal"),
     pauseForms: $("pauseForms"), pauseFormsVal: $("pauseFormsVal"),
@@ -101,7 +118,7 @@
     repeatLatin: $("repeatLatin"), repeatLatinVal: $("repeatLatinVal"),
     latinVoice: $("latinVoice"), germanVoice: $("germanVoice"),
     list: $("vocabList"), emptyState: $("emptyState"), countPill: $("countPill"),
-    search: $("searchInput"), sortSelect: $("sortSelect"),
+    search: $("searchInput"), sortSelect: $("sortSelect"), filterSelect: $("filterSelect"), favCount: $("favCount"),
     addBtn: $("addBtn"), checkAllBtn: $("checkAllBtn"), uncheckAllBtn: $("uncheckAllBtn"),
     importBtn: $("importBtn"), exportBtn: $("exportBtn"), sampleBtn: $("sampleBtn"),
     fileInput: $("fileInput"), emptySample: $("emptySample"),
@@ -117,21 +134,23 @@
     qSolveBtn: $("qSolveBtn"), qMicBtn: $("qMicBtn"), qNextBtn: $("qNextBtn"),
     qTypeForm: $("qTypeForm"), qTypeInput: $("qTypeInput"),
     qShuffleToggle: $("qShuffleToggle"), qAutoToggle: $("qAutoToggle"),
-    qWakeToggle: $("qWakeToggle"), qSkipDoneToggle: $("qSkipDoneToggle"),
+    qWakeToggle: $("qWakeToggle"), qSkipDoneToggle: $("qSkipDoneToggle"), qFavToggle: $("qFavToggle"),
     qScore: $("qScore"), qEmptyState: $("qEmptyState"),
     // Schreiben
     wProgress: $("wProgress"), wHint: $("wHint"), wPrompt: $("wPrompt"), wHear: $("wHear"),
     wForm: $("wForm"), wInput: $("wInput"), wCheckBtn: $("wCheckBtn"),
     wStatus: $("wStatus"), wAnswer: $("wAnswer"), wSolveBtn: $("wSolveBtn"), wNextBtn: $("wNextBtn"),
     wDirToggle: $("wDirToggle"), wShuffleToggle: $("wShuffleToggle"), wSkipDoneToggle: $("wSkipDoneToggle"),
-    wScore: $("wScore"), wEmptyState: $("wEmptyState"),
+    wFavToggle: $("wFavToggle"), wScore: $("wScore"), wEmptyState: $("wEmptyState"),
     // Karten
     cProgress: $("cProgress"), flashcard: $("flashcard"), flashInner: $("flashInner"),
     cFrontLabel: $("cFrontLabel"), cFront: $("cFront"), cHearFront: $("cHearFront"),
     cBackLabel: $("cBackLabel"), cBack: $("cBack"), cForms: $("cForms"),
     cPrevBtn: $("cPrevBtn"), cUnknownBtn: $("cUnknownBtn"), cKnownBtn: $("cKnownBtn"), cNextBtn: $("cNextBtn"),
     cDirToggle: $("cDirToggle"), cShuffleToggle: $("cShuffleToggle"), cSkipDoneToggle: $("cSkipDoneToggle"),
-    cScore: $("cScore"), cEmptyState: $("cEmptyState"),
+    cFavToggle: $("cFavToggle"), cScore: $("cScore"), cEmptyState: $("cEmptyState"),
+    // Statistik
+    statsContent: $("statsContent"), statsResetBtn: $("statsResetBtn"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -162,7 +181,9 @@
 
   function save() {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ vocab: state.vocab, title: state.title, settings: state.settings }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        vocab: state.vocab, title: state.title, settings: state.settings, progress,
+      }));
     } catch (e) { /* Speicher evtl. voll/blockiert */ }
   }
 
@@ -174,6 +195,12 @@
       if (Array.isArray(data.vocab)) state.vocab = data.vocab.map(normalize);
       if (typeof data.title === "string") state.title = data.title;
       if (data.settings) Object.assign(state.settings, data.settings);
+      if (data.progress) {
+        if (data.progress.days && typeof data.progress.days === "object") progress.days = data.progress.days;
+        if (data.progress.streak) Object.assign(progress.streak, data.progress.streak);
+        progress.totalCorrect = Number(data.progress.totalCorrect) || 0;
+        progress.totalWrong = Number(data.progress.totalWrong) || 0;
+      }
       return true;
     } catch (e) { return false; }
   }
@@ -186,7 +213,105 @@
       german: String(v.german ?? "").trim(),
       forms: String(v.forms ?? "").trim(),
       done: !!v.done,
+      fav: !!v.fav,
+      // SM-2 Spaced Repetition
+      sm2: {
+        interval: Number.isFinite(v.sm2?.interval) ? v.sm2.interval : 0,
+        easiness: Number.isFinite(v.sm2?.easiness) ? Math.max(1.3, v.sm2.easiness) : 2.5,
+        repetitions: Number.isFinite(v.sm2?.repetitions) ? v.sm2.repetitions : 0,
+        lastReview: Number.isFinite(v.sm2?.lastReview) ? v.sm2.lastReview : 0,
+      },
+      // Trefferstatistik (für Auswertung)
+      stats: {
+        seen: Number.isFinite(v.stats?.seen) ? v.stats.seen : 0,
+        correct: Number.isFinite(v.stats?.correct) ? v.stats.correct : 0,
+        wrong: Number.isFinite(v.stats?.wrong) ? v.stats.wrong : 0,
+      },
     };
+  }
+
+  /* ---------- SM-2 Spaced Repetition ---------- */
+  function daysSinceReview(v) {
+    if (!v.sm2.lastReview) return 999; // nie überprüft = sofort fällig
+    return Math.floor((Date.now() - v.sm2.lastReview) / (1000 * 60 * 60 * 24));
+  }
+
+  function updateSM2Correct(v) {
+    const { sm2 } = v;
+    sm2.repetitions++;
+    if (sm2.repetitions === 1) {
+      sm2.interval = 1;
+    } else if (sm2.repetitions === 2) {
+      sm2.interval = 3;
+    } else {
+      sm2.interval = Math.round(sm2.interval * sm2.easiness);
+    }
+    sm2.lastReview = Date.now();
+  }
+
+  function updateSM2Wrong(v) {
+    const { sm2 } = v;
+    sm2.repetitions = 0;
+    sm2.interval = 1;
+    sm2.lastReview = Date.now();
+  }
+
+  function isDueForReview(v) {
+    return daysSinceReview(v) >= v.sm2.interval;
+  }
+  const dueCount = () => state.vocab.filter(isDueForReview).length;
+
+  /* ---------- Statistik / Streak / Zeit ---------- */
+  function dayKey(ts) {
+    const d = ts ? new Date(ts) : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  function todayRecord() {
+    const k = dayKey();
+    if (!progress.days[k]) progress.days[k] = { correct: 0, wrong: 0, learned: 0, timeMs: 0 };
+    return progress.days[k];
+  }
+  function touchStreak() {
+    const today = dayKey();
+    const st = progress.streak;
+    if (st.lastDay === today) return;
+    const yesterday = dayKey(Date.now() - 86400000);
+    st.current = st.lastDay === yesterday ? st.current + 1 : 1;
+    st.lastDay = today;
+    if (st.current > st.longest) st.longest = st.current;
+  }
+  // Zeit nur in kurzen, aktiven Abschnitten zählen (Leerlauf > 90 s wird ignoriert)
+  function tickTime() {
+    const now = Date.now();
+    if (lastActivityTs && now - lastActivityTs < 90000) todayRecord().timeMs += now - lastActivityTs;
+    lastActivityTs = now;
+  }
+  // Eine beantwortete Vokabel verbuchen (correct = true/false)
+  function recordAnswer(v, correct) {
+    touchStreak();
+    tickTime();
+    const rec = todayRecord();
+    if (correct) { rec.correct++; progress.totalCorrect++; }
+    else { rec.wrong++; progress.totalWrong++; }
+    if (v) { v.stats.seen++; if (correct) v.stats.correct++; else v.stats.wrong++; }
+  }
+  function recordLearned() { todayRecord().learned++; }
+  function resetProgress() {
+    progress.days = {};
+    progress.streak = { current: 0, longest: 0, lastDay: "" };
+    progress.totalCorrect = 0; progress.totalWrong = 0;
+    state.vocab.forEach((v) => {
+      v.stats = { seen: 0, correct: 0, wrong: 0 };
+      v.sm2 = { interval: 0, easiness: 2.5, repetitions: 0, lastReview: 0 };
+    });
+    save();
+  }
+
+  /* ---------- Haptisches Feedback (Vibration, mobil) ---------- */
+  function haptic(kind) {
+    if (!state.settings.haptics) return;
+    if (!("vibrate" in navigator)) return;
+    try { navigator.vibrate(kind === "wrong" ? [40, 50, 40] : 25); } catch (e) {}
   }
 
   /* ---------- Voices ---------- */
@@ -477,10 +602,14 @@
     history.replaceState(null, "", location.pathname + location.search);
   }
 
-  /* ---------- Abspiel-Reihenfolge ---------- */
+  /* ---------- Abspiel-Reihenfolge (Hören) ----------
+     Bewusst schlicht: einfaches Durchhören in Listenreihenfolge.
+     Kein Spaced-Repetition-Umsortieren – das gibt es nur in den
+     Übungsmodi (Sprechen/Schreiben/Karten). */
   function buildOrder() {
     let idx = state.vocab.map((_, i) => i);
     if (state.settings.skipDone) idx = idx.filter((i) => !state.vocab[i].done);
+    if (state.settings.favOnly) idx = idx.filter((i) => state.vocab[i].fav);
     if (state.settings.shuffle) {
       for (let i = idx.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -488,6 +617,39 @@
       }
     }
     player.order = idx;
+  }
+
+  /* ---------- Spaced Repetition: Reihenfolge für Übungsmodi ----------
+     Fällige Vokabeln zuerst (am längsten überfällig zuerst), dann der Rest
+     in Listenreihenfolge. So tauchen schwache/neue Wörter häufiger auf. */
+  function srSort(idx) {
+    return idx.sort((a, b) => {
+      const vA = state.vocab[a], vB = state.vocab[b];
+      const dueA = isDueForReview(vA), dueB = isDueForReview(vB);
+      if (dueA !== dueB) return dueA ? -1 : 1;
+      if (dueA && dueB) {
+        const ovA = daysSinceReview(vA) - vA.sm2.interval;
+        const ovB = daysSinceReview(vB) - vB.sm2.interval;
+        if (ovA !== ovB) return ovB - ovA;          // stärker überfällig zuerst
+      }
+      return vA.seq - vB.seq;
+    });
+  }
+
+  // Gemeinsamer Filter+Sortier-Helfer für die Übungsmodi
+  function buildPracticeOrder({ skipDone, favOnly, shuffle }) {
+    let idx = state.vocab.map((_, i) => i);
+    if (skipDone) idx = idx.filter((i) => !state.vocab[i].done);
+    if (favOnly) idx = idx.filter((i) => state.vocab[i].fav);
+    if (shuffle) {
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [idx[i], idx[j]] = [idx[j], idx[i]];
+      }
+    } else {
+      srSort(idx);                                   // ohne Zufall: Spaced Repetition
+    }
+    return idx;
   }
 
   /* ---------- Wiedergabe-Schleife ---------- */
@@ -664,16 +826,40 @@
     });
   }
 
+  function passesFilter(v) {
+    switch (state.settings.filter) {
+      case "fav": return v.fav;
+      case "open": return !v.done;
+      case "done": return v.done;
+      default: return true;
+    }
+  }
+
   function renderList() {
     sortVocab();
     const q = el.search.value.trim().toLowerCase();
     el.list.innerHTML = "";
-    const filtered = state.vocab.filter((v) =>
+    const filtered = state.vocab.filter((v) => passesFilter(v) && (
       !q || v.latin.toLowerCase().includes(q) || v.german.toLowerCase().includes(q) || v.forms.toLowerCase().includes(q)
-    );
+    ));
 
     el.emptyState.hidden = state.vocab.length !== 0;
     el.countPill.textContent = `${activeCount()} / ${state.vocab.length}`;
+    if (el.favCount) {
+      const favs = state.vocab.filter((v) => v.fav).length;
+      el.favCount.textContent = favs ? String(favs) : "";
+    }
+
+    // Leere Trefferliste trotz vorhandener Vokabeln (z. B. Filter „Favoriten“)
+    if (state.vocab.length && !filtered.length) {
+      const li = document.createElement("li");
+      li.className = "vi-empty";
+      li.textContent = state.settings.filter === "fav"
+        ? "Keine Favoriten. Tippe auf den Stern, um Vokabeln zu markieren."
+        : "Keine Treffer für diesen Filter.";
+      el.list.appendChild(li);
+      return;
+    }
 
     for (const v of filtered) {
       const li = document.createElement("li");
@@ -695,11 +881,17 @@
 
       const actions = document.createElement("div");
       actions.className = "vi-actions";
+      const favBtn = mkBtn(v.fav ? ICON.starFilled : ICON.star, v.fav ? "Favorit entfernen" : "Als Favorit markieren", () => {
+        v.fav = !v.fav; save(); renderList();
+      });
+      favBtn.classList.add("vi-star");
+      if (v.fav) favBtn.classList.add("is-fav");
+      favBtn.setAttribute("aria-pressed", String(!!v.fav));
       const playBtn = mkBtn(ICON.playSm, "Diese Vokabel abspielen", () => playOne(v.id));
       playBtn.classList.add("play-one");
       const editBtn = mkBtn(ICON.edit, "Bearbeiten", () => openEdit(v.id));
       const delBtn = mkBtn(ICON.trash, "Löschen", () => removeVocab(v.id));
-      actions.append(playBtn, editBtn, delBtn);
+      actions.append(favBtn, playBtn, editBtn, delBtn);
 
       li.append(cb, text, actions);
       el.list.appendChild(li);
@@ -749,7 +941,8 @@
   function exportJSON() {
     const payload = {
       title: state.title,
-      vocab: state.vocab.map(({ latin, german, forms, done }) => ({ latin, german, forms, done })),
+      vocab: state.vocab.map(({ latin, german, forms, done, fav }) =>
+        fav ? { latin, german, forms, done, fav } : { latin, german, forms, done }),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -845,17 +1038,23 @@
     el.readFormsToggle.checked = s.readForms;
     el.beepToggle.checked = s.beep;
     el.skipDoneToggle.checked = s.skipDone;
+    if (el.favToggle) el.favToggle.checked = s.favOnly;
+    if (el.hapticsToggle) el.hapticsToggle.checked = s.haptics;
     el.sortSelect.value = s.sort;
+    if (el.filterSelect) el.filterSelect.value = s.filter;
     el.qShuffleToggle.checked = s.qShuffle;
     el.qAutoToggle.checked = s.qAuto;
     el.qWakeToggle.checked = s.qWake;
     el.qSkipDoneToggle.checked = s.qSkipDone;
+    if (el.qFavToggle) el.qFavToggle.checked = s.qFavOnly;
     el.wDirToggle.checked = s.wDir;
     el.wShuffleToggle.checked = s.wShuffle;
     el.wSkipDoneToggle.checked = s.wSkipDone;
+    if (el.wFavToggle) el.wFavToggle.checked = s.wFavOnly;
     el.cDirToggle.checked = s.cDir;
     el.cShuffleToggle.checked = s.cShuffle;
     el.cSkipDoneToggle.checked = s.cSkipDone;
+    if (el.cFavToggle) el.cFavToggle.checked = s.cFavOnly;
     applyTheme(s.theme);
   }
 
@@ -890,6 +1089,11 @@
     toggle(el.readFormsToggle, "readForms");
     toggle(el.beepToggle, "beep");
     toggle(el.skipDoneToggle, "skipDone", { rebuild: true });
+    toggle(el.favToggle, "favOnly", { rebuild: true });
+    if (el.hapticsToggle) el.hapticsToggle.addEventListener("change", () => {
+      state.settings.haptics = el.hapticsToggle.checked; save();
+      if (el.hapticsToggle.checked) haptic("ok");      // kurzes Probe-Feedback
+    });
 
     const slider = (input, valEl, key, isInt) => input.addEventListener("input", () => {
       const val = isInt ? parseInt(input.value, 10) : parseFloat(input.value);
@@ -907,6 +1111,7 @@
     el.germanVoice.addEventListener("change", () => { state.settings.germanVoiceURI = el.germanVoice.value; save(); });
 
     el.sortSelect.addEventListener("change", () => { state.settings.sort = el.sortSelect.value; save(); renderList(); });
+    if (el.filterSelect) el.filterSelect.addEventListener("change", () => { state.settings.filter = el.filterSelect.value; save(); renderList(); });
     el.search.addEventListener("input", renderList);
 
     el.addBtn.addEventListener("click", () => openEdit(null));
@@ -969,6 +1174,7 @@
     qToggle(el.qShuffleToggle, "qShuffle", true);
     qToggle(el.qAutoToggle, "qAuto", false);
     qToggle(el.qSkipDoneToggle, "qSkipDone", true);
+    if (el.qFavToggle) el.qFavToggle.addEventListener("change", () => { state.settings.qFavOnly = el.qFavToggle.checked; save(); if (currentView === "quiz") enterQuiz(); });
     el.qWakeToggle.addEventListener("change", () => { state.settings.qWake = el.qWakeToggle.checked; save(); updateWakeLock(); });
 
     // Schreiben-Steuerung
@@ -980,6 +1186,7 @@
     wToggle(el.wDirToggle, "wDir");
     wToggle(el.wShuffleToggle, "wShuffle");
     wToggle(el.wSkipDoneToggle, "wSkipDone");
+    if (el.wFavToggle) wToggle(el.wFavToggle, "wFavOnly");
 
     // Karten-Steuerung
     el.flashcard.addEventListener("click", () => { if (cardSwiped) { cardSwiped = false; return; } flipCard(); });
@@ -997,9 +1204,23 @@
     cToggle(el.cDirToggle, "cDir");
     cToggle(el.cShuffleToggle, "cShuffle");
     cToggle(el.cSkipDoneToggle, "cSkipDone");
+    if (el.cFavToggle) cToggle(el.cFavToggle, "cFavOnly");
+
+    // Statistik
+    if (el.statsResetBtn) el.statsResetBtn.addEventListener("click", () => {
+      if (confirm("Wirklich alle Lernstatistiken und den Wiederholungsplan zurücksetzen? Die Vokabeln bleiben erhalten.")) {
+        resetProgress(); renderStats(); toast("Statistik zurückgesetzt.");
+      }
+    });
+
+    // Zeitmessung beim Verlassen/Wechseln der Seite sauber verbuchen
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && PRACTICE.has(currentView)) { tickTime(); save(); }
+      else if (!document.hidden && PRACTICE.has(currentView)) lastActivityTs = Date.now();
+    });
 
     if (synth) synth.onvoiceschanged = loadVoices;
-    window.addEventListener("beforeunload", () => synth && synth.cancel());
+    window.addEventListener("beforeunload", () => { if (PRACTICE.has(currentView)) { tickTime(); save(); } synth && synth.cancel(); });
   }
 
   /* ============================================================
@@ -1110,15 +1331,11 @@
   const currentQuizVocab = () => state.vocab[quiz.order[quiz.pos]];
 
   function buildQuizOrder() {
-    let idx = state.vocab.map((_, i) => i);
-    if (state.settings.qSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
-    if (state.settings.qShuffle) {
-      for (let i = idx.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [idx[i], idx[j]] = [idx[j], idx[i]];
-      }
-    }
-    quiz.order = idx;
+    quiz.order = buildPracticeOrder({
+      skipDone: state.settings.qSkipDone,
+      favOnly: state.settings.qFavOnly,
+      shuffle: state.settings.qShuffle,
+    });
   }
 
   function setQStatus(text, cls) {
@@ -1284,15 +1501,22 @@
     quiz.justAnswered = true;
     quizStopListen();
     successTone();
+    haptic("ok");
     showAnswer(v.german, "is-ok");
     setQStatus("Richtig!", "is-ok");
     quiz.correctCount++; quiz.completedCount++;
+    if (v) {
+      updateSM2Correct(v);
+      recordAnswer(v, true);
+      if (!v.done) { v.done = true; recordLearned(); renderList(); updateProgress(); }
+      save();
+    }
     updateQuizScore();
-    if (v && !v.done) { v.done = true; save(); renderList(); updateProgress(); } // zählt als gelernt
     setTimeout(() => quizNext(true), 1150);
   }
 
   function quizHandleWrong(heard) {
+    haptic("wrong");
     setQStatus(heard ? `Noch nicht: „${heard}“ – nochmal oder „Lösung“.` : "Nicht verstanden – nochmal oder „Lösung“.", "is-wrong");
     // quizRecoEnd startet (bei Auto) automatisch erneut für den nächsten Versuch
   }
@@ -1304,6 +1528,12 @@
     quizStopListen();
     quiz.revealed = true;
     quiz.completedCount++;
+    if (v) {
+      updateSM2Wrong(v);
+      recordAnswer(v, false);
+      save();
+    }
+    haptic("wrong");
     updateQuizScore();
     showAnswer(v.german, "is-reveal");
     setQStatus("Lösung wird vorgelesen …", "is-wrong");
@@ -1325,12 +1555,11 @@
   const writeTarget = (v) => (state.settings.wDir ? v.latin : v.german);
 
   function buildWriteOrder() {
-    let idx = state.vocab.map((_, i) => i);
-    if (state.settings.wSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
-    if (state.settings.wShuffle) {
-      for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
-    }
-    write.order = idx;
+    write.order = buildPracticeOrder({
+      skipDone: state.settings.wSkipDone,
+      favOnly: state.settings.wFavOnly,
+      shuffle: state.settings.wShuffle,
+    });
   }
   function writeRenderEmpty() {
     const empty = write.order.length === 0;
@@ -1397,11 +1626,18 @@
       el.wInput.className = "w-input is-ok"; el.wInput.disabled = true;
       el.wCheckBtn.textContent = "Weiter";
       successTone();
+      haptic("ok");
       showWAnswer(writeTarget(v), "is-ok");
       setWStatus("Richtig! Enter für weiter.", "is-ok");
-      if (!state.settings.wDir && !v.done) { v.done = true; save(); renderList(); updateProgress(); }
+      if (v) {
+        updateSM2Correct(v);
+        recordAnswer(v, true);
+        if (!state.settings.wDir && !v.done) { v.done = true; recordLearned(); renderList(); updateProgress(); }
+        save();
+      }
     } else {
       el.wInput.className = "w-input is-wrong";
+      haptic("wrong");
       setWStatus("Noch nicht – nochmal versuchen oder „Lösung“.", "is-wrong");
       el.wInput.select();
     }
@@ -1417,6 +1653,12 @@
     showWAnswer(writeTarget(v), "is-reveal");
     setWStatus("Lösung – Enter für weiter.", "is-wrong");
     failTone();
+    haptic("wrong");
+    if (v) {
+      updateSM2Wrong(v);
+      recordAnswer(v, false);
+      save();
+    }
     if (state.settings.wDir) speak(v.latin, state.settings.latinVoiceURI, "it-IT");
     else speak(v.german, state.settings.germanVoiceURI, "de-DE");
   }
@@ -1433,12 +1675,11 @@
   const currentCardVocab = () => state.vocab[cards.order[cards.pos]];
 
   function buildCardsOrder() {
-    let idx = state.vocab.map((_, i) => i);
-    if (state.settings.cSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
-    if (state.settings.cShuffle) {
-      for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
-    }
-    cards.order = idx;
+    cards.order = buildPracticeOrder({
+      skipDone: state.settings.cSkipDone,
+      favOnly: state.settings.cFavOnly,
+      shuffle: state.settings.cShuffle,
+    });
   }
   function cardsRenderEmpty() {
     const empty = cards.order.length === 0;
@@ -1493,7 +1734,16 @@
 
   function cardsMark(known) {
     const v = currentCardVocab();
-    if (v && v.done !== known) { v.done = known; save(); renderList(); updateProgress(); }
+    if (v) {
+      if (known) { updateSM2Correct(v); recordAnswer(v, true); haptic("ok"); }
+      else { updateSM2Wrong(v); recordAnswer(v, false); haptic("wrong"); }
+      if (v.done !== known) {
+        v.done = known;
+        if (known) recordLearned();
+        renderList(); updateProgress();
+      }
+      save();
+    }
     updateCardsScore();
     if (state.settings.cSkipDone && known) {
       buildCardsOrder();
@@ -1512,8 +1762,188 @@
     else speak(v.latin, state.settings.latinVoiceURI, "it-IT");
   }
 
+  /* ============================================================
+     STATISTIK / FORTSCHRITT
+     ============================================================ */
+  const pct = (n, d) => (d > 0 ? Math.round((100 * n) / d) + " %" : "–");
+  function fmtDuration(ms) {
+    const min = Math.round(ms / 60000);
+    if (min < 60) return `${min} min`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h} h ${m} min` : `${h} h`;
+  }
+  const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+  function statTile(label, value, sub) {
+    const t = document.createElement("div");
+    t.className = "stat-tile";
+    const v = document.createElement("div"); v.className = "stat-num"; v.textContent = value;
+    const l = document.createElement("div"); l.className = "stat-label"; l.textContent = label;
+    t.append(v, l);
+    if (sub) { const s = document.createElement("div"); s.className = "stat-sub"; s.textContent = sub; t.appendChild(s); }
+    return t;
+  }
+  function statSection(title) {
+    const sec = document.createElement("section");
+    sec.className = "card stats-section";
+    if (title) { const h = document.createElement("h2"); h.className = "stats-h"; h.textContent = title; sec.appendChild(h); }
+    return sec;
+  }
+
+  function renderStats() {
+    const c = el.statsContent;
+    if (!c) return;
+    c.innerHTML = "";
+
+    const total = state.vocab.length;
+    if (!total) {
+      const p = document.createElement("p");
+      p.className = "empty-state";
+      p.textContent = "Noch keine Vokabeln – und damit noch nichts auszuwerten. Lade unter „Vokabeln“ ein Beispiel oder eine Liste.";
+      c.appendChild(p);
+      return;
+    }
+
+    const learned = state.vocab.filter((v) => v.done).length;
+    const rec = progress.days[dayKey()] || { correct: 0, wrong: 0, learned: 0, timeMs: 0 };
+    const totC = progress.totalCorrect, totW = progress.totalWrong;
+
+    // Beherrschung nach SM-2-Wiederholungen
+    let neu = 0, lernen = 0, fest = 0;
+    for (const v of state.vocab) {
+      const r = v.sm2.repetitions;
+      if (r === 0) neu++; else if (r <= 2) lernen++; else fest++;
+    }
+
+    /* --- Serie (Streak) + Heute --- */
+    const top = statSection("");
+    top.classList.add("stats-top");
+    const grid = document.createElement("div");
+    grid.className = "stats-grid";
+    grid.append(
+      statTile("Tage in Serie", String(progress.streak.current), progress.streak.longest ? `längste: ${progress.streak.longest}` : ""),
+      statTile("Heute gelernt", String(rec.learned), `${fmtDuration(rec.timeMs)} geübt`),
+      statTile("Heute richtig", pct(rec.correct, rec.correct + rec.wrong), `${rec.correct} von ${rec.correct + rec.wrong}`),
+      statTile("Fällig heute", String(dueCount()), "zur Wiederholung"),
+    );
+    top.appendChild(grid);
+    c.appendChild(top);
+
+    /* --- Aktivität der letzten 14 Tage --- */
+    const chartSec = statSection("Letzte 14 Tage");
+    const chart = document.createElement("div");
+    chart.className = "chart";
+    const days = [];
+    for (let i = 13; i >= 0; i--) {
+      const ts = Date.now() - i * 86400000;
+      const k = dayKey(ts);
+      const d = progress.days[k] || { correct: 0, wrong: 0 };
+      days.push({ ts, correct: d.correct, wrong: d.wrong, total: d.correct + d.wrong });
+    }
+    const maxTotal = Math.max(1, ...days.map((d) => d.total));
+    for (const d of days) {
+      const col = document.createElement("div");
+      col.className = "chart-col";
+      const bar = document.createElement("div");
+      bar.className = "chart-bar";
+      bar.title = `${new Date(d.ts).toLocaleDateString("de-DE")}: ${d.correct} richtig, ${d.wrong} falsch`;
+      const h = Math.round((d.total / maxTotal) * 100);
+      if (d.total) {
+        if (d.correct) {
+          const ok = document.createElement("div");
+          ok.className = "chart-ok";
+          ok.style.height = `${Math.max(6, Math.round((d.correct / d.total) * h))}%`;
+          bar.appendChild(ok);
+        }
+        if (d.wrong) {
+          const wr = document.createElement("div");
+          wr.className = "chart-wr";
+          wr.style.height = `${Math.max(6, Math.round((d.wrong / d.total) * h))}%`;
+          bar.appendChild(wr);
+        }
+        bar.classList.add("has-data");
+      }
+      const lab = document.createElement("div");
+      lab.className = "chart-lab";
+      lab.textContent = WEEKDAYS[new Date(d.ts).getDay()];
+      col.append(bar, lab);
+      chart.appendChild(col);
+    }
+    chartSec.appendChild(chart);
+    const legend = document.createElement("p");
+    legend.className = "chart-legend";
+    legend.innerHTML = '<span class="dot dot-ok"></span> richtig &nbsp; <span class="dot dot-wr"></span> falsch';
+    chartSec.appendChild(legend);
+    c.appendChild(chartSec);
+
+    /* --- Beherrschung + Gesamt --- */
+    const mSec = statSection("Beherrschung");
+    const bars = document.createElement("div");
+    bars.className = "mastery";
+    const mrow = (label, n, cls) => {
+      const row = document.createElement("div"); row.className = "m-row";
+      const head = document.createElement("div"); head.className = "m-head";
+      const nm = document.createElement("span"); nm.textContent = label;
+      const ct = document.createElement("span"); ct.className = "m-count"; ct.textContent = String(n);
+      head.append(nm, ct);
+      const track = document.createElement("div"); track.className = "m-track";
+      const fill = document.createElement("div"); fill.className = "m-fill " + cls;
+      fill.style.width = total ? `${Math.round((n / total) * 100)}%` : "0%";
+      track.appendChild(fill);
+      row.append(head, track);
+      return row;
+    };
+    bars.append(
+      mrow("Neu", neu, "m-new"),
+      mrow("Am Lernen", lernen, "m-learn"),
+      mrow("Gefestigt", fest, "m-firm"),
+    );
+    mSec.appendChild(bars);
+    const overall = document.createElement("p");
+    overall.className = "stats-foot";
+    overall.textContent = `Insgesamt ${pct(totC, totC + totW)} richtig (${totC} von ${totC + totW} Antworten) · ${learned} von ${total} abgehakt.`;
+    mSec.appendChild(overall);
+    c.appendChild(mSec);
+
+    /* --- Schwierige Vokabeln --- */
+    const weak = state.vocab
+      .filter((v) => v.stats.seen > 0 && v.stats.wrong > 0)
+      .map((v) => ({ v, acc: v.stats.correct / v.stats.seen }))
+      .sort((a, b) => a.acc - b.acc || b.v.stats.wrong - a.v.stats.wrong)
+      .slice(0, 6);
+    if (weak.length) {
+      const wSec = statSection("Diese fallen schwer");
+      const ul = document.createElement("ul");
+      ul.className = "weak-list";
+      for (const { v, acc } of weak) {
+        const li = document.createElement("li");
+        li.className = "weak-item";
+        const tx = document.createElement("div"); tx.className = "weak-text";
+        const la = document.createElement("span"); la.className = "weak-latin"; la.textContent = v.latin;
+        const ge = document.createElement("span"); ge.className = "weak-german"; ge.textContent = v.german;
+        tx.append(la, ge);
+        const sc = document.createElement("span"); sc.className = "weak-score";
+        sc.textContent = `${Math.round(acc * 100)} %`;
+        const star = mkBtn(v.fav ? ICON.starFilled : ICON.star, v.fav ? "Favorit entfernen" : "Als Favorit markieren", () => {
+          v.fav = !v.fav; save(); renderStats(); renderList();
+        });
+        star.classList.add("vi-star");
+        if (v.fav) star.classList.add("is-fav");
+        li.append(tx, sc, star);
+        ul.appendChild(li);
+      }
+      wSec.appendChild(ul);
+      const hint = document.createElement("p");
+      hint.className = "stats-foot";
+      hint.textContent = "Tipp: Markiere schwierige Wörter mit dem Stern und übe gezielt mit „Nur Favoriten“.";
+      wSec.appendChild(hint);
+      c.appendChild(wSec);
+    }
+  }
+
   /* ---------- Ansicht wechseln ---------- */
-  const VIEWS = ["listen", "quiz", "write", "cards", "manage"];
+  const VIEWS = ["listen", "quiz", "write", "cards", "stats", "manage"];
+  const PRACTICE = new Set(["quiz", "write", "cards"]);
 
   function switchView(view) {
     if (view === currentView || !VIEWS.includes(view)) return;
@@ -1522,6 +1952,7 @@
     if (recognitionOn) stopVoice();
     quizStopListen();
     if (synth) synth.cancel();
+    if (PRACTICE.has(currentView)) tickTime();      // Zeit des verlassenen Übungsmodus verbuchen
 
     currentView = view;
     VIEWS.forEach((v) => { const node = document.getElementById("view-" + v); if (node) node.hidden = v !== view; });
@@ -1532,9 +1963,12 @@
       if (on && t.scrollIntoView) t.scrollIntoView({ inline: "center", block: "nearest" });
     });
 
+    lastActivityTs = PRACTICE.has(view) ? Date.now() : 0;   // Zeitmessung im Übungsmodus starten
+
     if (view === "quiz") enterQuiz();
     else if (view === "write") enterWrite();
     else if (view === "cards") enterCards();
+    else if (view === "stats") renderStats();
     else if (view === "listen" && !player.playing && player.pos < 0) setNpState("", "Bereit");
 
     updateWakeLock();
