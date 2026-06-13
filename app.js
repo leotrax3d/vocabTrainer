@@ -53,6 +53,9 @@
   let recognition = null;     // Sprachsteuerung
   let recognitionOn = false;
   let lastCmd = { name: "", t: 0 };
+  let speakingNow = false;    // App spricht gerade (Mikrofon ignorieren)
+  let muteRecoUntil = 0;      // kurze Nachlaufzeit nach dem Sprechen
+  let restartTimer = null;
 
   /* ---------- DOM ---------- */
   const $ = (id) => document.getElementById(id);
@@ -177,8 +180,10 @@
       if (v) { u.voice = v; u.lang = v.lang; }
       else if (fallbackLang) { u.lang = fallbackLang; }
       u.rate = state.settings.rate;
-      u.onend = resolve;
-      u.onerror = resolve;
+      speakingNow = true;
+      const done = () => { speakingNow = false; muteRecoUntil = Date.now() + 500; resolve(); };
+      u.onend = done;
+      u.onerror = done;
       synth.speak(u);
     });
   }
@@ -262,55 +267,88 @@
   }
 
   /* ---------- Sprachsteuerung ---------- */
+  const CMD_LABEL = {
+    known: "Erkannt: abgehakt – weiter",
+    next: "Erkannt: weiter",
+    prev: "Erkannt: zurück",
+    pause: "Erkannt: Pause",
+    play: "Erkannt: Wiedergabe",
+    repeat: "Erkannt: nochmal",
+  };
+
   function startVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { toast("Spracherkennung wird hier nicht unterstützt."); el.voiceToggle.checked = false; return; }
+    if (!SR) { toast("Spracherkennung wird in diesem Browser nicht unterstützt."); el.voiceToggle.checked = false; return; }
+    const secure = window.isSecureContext || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    if (!secure) toast("Hinweis: Mikrofon braucht HTTPS – online (z. B. GitHub Pages) statt lokaler Datei.");
+
     if (!recognition) {
       recognition = new SR();
       recognition.lang = "de-DE";
       recognition.continuous = true;
-      recognition.interimResults = false;
+      recognition.interimResults = true;   // schnellere Reaktion
+      recognition.maxAlternatives = 3;     // mehr Treffer-Chancen
       recognition.onresult = handleVoiceResult;
       recognition.onerror = (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           toast("Mikrofon-Zugriff verweigert.");
           stopVoice();
         }
+        // no-speech / aborted / network: onend übernimmt den Neustart
       };
-      recognition.onend = () => { if (recognitionOn) { try { recognition.start(); } catch (e) {} } };
+      recognition.onend = scheduleRestart;
     }
     recognitionOn = true;
+    el.voiceToggle.checked = true;
     el.voiceChip.classList.add("listening");
     try { recognition.start(); } catch (e) {}
-    toast("Sprachsteuerung aktiv.");
+    toast("Sprachsteuerung aktiv – sag z. B. „gewusst“ oder „weiter“.");
+  }
+
+  function scheduleRestart() {
+    if (!recognitionOn) return;
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      if (!recognitionOn) return;
+      try { recognition.start(); }
+      catch (e) { restartTimer = setTimeout(() => { try { recognition.start(); } catch (_) {} }, 400); }
+    }, 250);
   }
 
   function stopVoice() {
     recognitionOn = false;
+    clearTimeout(restartTimer);
     el.voiceToggle.checked = false;
     el.voiceChip.classList.remove("listening");
-    if (recognition) { try { recognition.stop(); } catch (e) {} }
+    if (recognition) { recognition.onend = null; try { recognition.stop(); } catch (e) {} recognition.onend = scheduleRestart; }
   }
 
   function handleVoiceResult(e) {
+    // Eigene Sprachausgabe nicht als Befehl werten
+    if (speakingNow || Date.now() < muteRecoUntil) return;
+    // Alle Alternativen des letzten (auch vorläufigen) Ergebnisses prüfen
     const res = e.results[e.results.length - 1];
-    if (!res || !res.isFinal) return;
-    const text = res[0].transcript.toLowerCase().trim();
-    runCommand(text);
+    if (!res) return;
+    for (let i = 0; i < res.length; i++) {
+      const text = (res[i].transcript || "").toLowerCase().trim();
+      if (text && matchCommand(text)) return; // erster Treffer reicht
+    }
   }
 
-  function runCommand(text) {
-    // Reihenfolge: spezifischere zuerst
+  function matchCommand(text) {
     let cmd = null;
-    if (/(gewusst|gewußt|richtig|konnte|kann ich|gekonnt)/.test(text)) cmd = "known";
-    else if (/(zurück|zurueck|vorher)/.test(text)) cmd = "prev";
-    else if (/(weiterspielen|abspielen|starten|^los|play)/.test(text)) cmd = "play";
-    else if (/(stop|stopp|pause|anhalten|halt)/.test(text)) cmd = "pause";
-    else if (/(weiter|nächste|naechste|nicht|next|skip)/.test(text)) cmd = "next";
-    if (!cmd) return;
+    // Verneinung zuerst – „nicht gewusst“ darf nicht als „gewusst“ gelten
+    if (/(nicht gewusst|nicht gewußt|nicht gekonnt|weiß nicht|weiss nicht|keine ahnung|falsch|leider|nein)/.test(text)) cmd = "next";
+    else if (/(gewusst|gewußt|gekonnt|richtig|konnte|kann ich|kenne ich|abhaken|gelernt|sitzt)/.test(text)) cmd = "known";
+    else if (/(nochmal|noch mal|wiederhol|wiederholen|repeat)/.test(text)) cmd = "repeat";
+    else if (/(zurück|zurueck|vorher|davor|zurueckgehen)/.test(text)) cmd = "prev";
+    else if (/(weiterspielen|abspielen|starten|start|fortsetzen|loslegen|los geht|^los\b|play)/.test(text)) cmd = "play";
+    else if (/(stop|stopp|pause|anhalten|\bhalt\b|warte)/.test(text)) cmd = "pause";
+    else if (/(weiter|nächste|naechste|nächstes|naechstes|überspringen|ueberspringen|skip|next)/.test(text)) cmd = "next";
+    if (!cmd) return false;
 
     const now = Date.now();
-    if (cmd === lastCmd.name && now - lastCmd.t < 1200) return; // Doppel-Trigger vermeiden
+    if (cmd === lastCmd.name && now - lastCmd.t < 1500) return true; // Doppel-Trigger schlucken
     lastCmd = { name: cmd, t: now };
 
     if (cmd === "known") markCurrentKnown();
@@ -318,12 +356,20 @@
     else if (cmd === "prev") jump(-1);
     else if (cmd === "pause") pause();
     else if (cmd === "play") play();
+    else if (cmd === "repeat") repeatCurrent();
+    toast(CMD_LABEL[cmd]);
+    return true;
   }
 
   function markCurrentKnown() {
     const v = state.vocab.find((x) => x.id === player.currentId);
     if (v) { v.done = true; save(); renderList(); }
     jump(1);
+  }
+
+  function repeatCurrent() {
+    if (player.currentId) playOne(player.currentId);
+    else play();
   }
 
   /* ---------- Teilen per Link ---------- */
