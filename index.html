@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Audio-Vokabeltrainer für Latein – hören, lernen, abhaken." />
-  <meta name="theme-color" content="#D97757" />
+  <meta name="theme-color" content="#F0EEE6" />
   <title>Vokabeltrainer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,14 +17,11 @@
   <header class="site-header">
     <div class="wrap header-inner">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <div>
-          <h1 class="brand-title">Vokabeltrainer</h1>
-          <p class="brand-sub" id="deckTitle">Latein · Audio</p>
-        </div>
+        <h1 class="brand-title">Vokabeltrainer</h1>
+        <p class="brand-sub" id="deckTitle">Latein</p>
       </div>
       <button id="themeToggle" class="icon-btn" type="button" aria-label="Farbschema wechseln" title="Hell / Dunkel">
-        <span class="theme-icon" aria-hidden="true">☾</span>
+        <span class="theme-icon" aria-hidden="true"></span>
       </button>
     </div>
   </header>
@@ -34,7 +31,7 @@
     <!-- Player -->
     <section class="card player" aria-label="Wiedergabe">
       <div class="now-playing" id="nowPlaying">
-        <p class="np-label">Bereit</p>
+        <p class="np-label" id="npLabel">Bereit</p>
         <p class="np-latin" id="npLatin">—</p>
         <p class="np-german" id="npGerman"></p>
         <p class="np-forms" id="npForms"></p>
@@ -46,15 +43,16 @@
       <p class="progress-text" id="progressText" aria-live="polite">0 von 0</p>
 
       <div class="controls">
-        <button id="prevBtn" class="ctrl" type="button" aria-label="Vorherige Vokabel" title="Zurück">⏮</button>
-        <button id="playBtn" class="ctrl ctrl-primary" type="button" aria-label="Abspielen">▶</button>
-        <button id="nextBtn" class="ctrl" type="button" aria-label="Nächste Vokabel" title="Weiter">⏭</button>
+        <button id="prevBtn" class="ctrl" type="button" aria-label="Vorherige Vokabel" title="Zurück"></button>
+        <button id="playBtn" class="ctrl ctrl-primary" type="button" aria-label="Abspielen"></button>
+        <button id="nextBtn" class="ctrl" type="button" aria-label="Nächste Vokabel" title="Weiter"></button>
       </div>
 
       <div class="player-toggles">
         <label class="chip"><input type="checkbox" id="shuffleToggle" /> Zufall</label>
         <label class="chip"><input type="checkbox" id="loopToggle" /> Wiederholen</label>
         <label class="chip"><input type="checkbox" id="readFormsToggle" /> Formen vorlesen</label>
+        <label class="chip"><input type="checkbox" id="beepToggle" /> Signalton</label>
         <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
       </div>
     </section>
@@ -66,6 +64,10 @@
         <div class="field">
           <label for="pauseBetween">Pause Latein → Deutsch: <strong id="pauseBetweenVal">5,0</strong> s</label>
           <input type="range" id="pauseBetween" min="0" max="15" step="0.5" value="5" />
+        </div>
+        <div class="field">
+          <label for="pauseForms">Pause vor den Formen: <strong id="pauseFormsVal">1,0</strong> s</label>
+          <input type="range" id="pauseForms" min="0" max="10" step="0.5" value="1" />
         </div>
         <div class="field">
           <label for="pauseAfter">Pause nach jeder Vokabel: <strong id="pauseAfterVal">1,5</strong> s</label>
@@ -88,24 +90,32 @@
           <select id="germanVoice"></select>
         </div>
       </div>
-      <p class="hint">Tipp: Für Latein klingt eine <em>italienische</em> Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play/Pause, <kbd>←</kbd>/<kbd>→</kbd> blättern.</p>
+      <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play / Pause, <kbd>←</kbd> <kbd>→</kbd> blättern.</p>
     </details>
 
     <!-- Vocab list -->
     <section class="card list-card" aria-label="Vokabelliste">
       <div class="list-head">
         <h2>Vokabeln <span class="count-pill" id="countPill">0</span></h2>
-        <input type="search" id="searchInput" class="search" placeholder="Suchen…" aria-label="Vokabeln durchsuchen" />
+        <div class="list-head-tools">
+          <select id="sortSelect" class="sort" aria-label="Liste sortieren">
+            <option value="seq">Reihenfolge</option>
+            <option value="latin">Latein A–Z</option>
+            <option value="german">Deutsch A–Z</option>
+            <option value="status">Offene zuerst</option>
+          </select>
+          <input type="search" id="searchInput" class="search" placeholder="Suchen" aria-label="Vokabeln durchsuchen" />
+        </div>
       </div>
 
       <div class="list-toolbar">
-        <button id="addBtn" class="btn btn-soft" type="button">+ Vokabel</button>
+        <button id="addBtn" class="btn btn-soft" type="button">Vokabel hinzufügen</button>
         <button id="checkAllBtn" class="btn btn-ghost" type="button">Alle abhaken</button>
         <button id="uncheckAllBtn" class="btn btn-ghost" type="button">Zurücksetzen</button>
         <span class="spacer"></span>
-        <button id="importBtn" class="btn btn-ghost" type="button">Import JSON</button>
-        <button id="exportBtn" class="btn btn-ghost" type="button">Export JSON</button>
-        <button id="sampleBtn" class="btn btn-ghost" type="button">Beispiel laden</button>
+        <button id="importBtn" class="btn btn-ghost" type="button">Import</button>
+        <button id="exportBtn" class="btn btn-ghost" type="button">Export</button>
+        <button id="sampleBtn" class="btn btn-ghost" type="button">Beispiel</button>
         <input type="file" id="fileInput" accept="application/json,.json" hidden />
       </div>
 
@@ -118,7 +128,7 @@
   </main>
 
   <footer class="site-footer wrap">
-    <p>Audio-Vokabeltrainer · läuft komplett im Browser · Daten bleiben lokal gespeichert.</p>
+    <p>Läuft vollständig im Browser. Vokabeln werden nur lokal auf diesem Gerät gespeichert.</p>
   </footer>
 
   <!-- Edit / Add dialog -->
