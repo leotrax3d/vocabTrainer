@@ -830,7 +830,7 @@
     toast("Beispiel geladen.");
   }
 
-  function applyDeckTitle() { el.deckTitle.textContent = state.title; }
+  function applyDeckTitle() { if (el.deckTitle) el.deckTitle.textContent = state.title; }
 
   /* ---------- Settings UI ---------- */
   function applySettingsToUI() {
