@@ -10,6 +10,14 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
 
 ## Funktionen
 
+Zwei Modi, umschaltbar über die Tabs **Hören** und **Abfrage**.
+
+- **Abfrage-Modus (Sprechen)**: Es wird nur die lateinische Grundform gezeigt;
+  du sprichst die deutsche Übersetzung ins Mikrofon. Stimmt sie, ertönt ein
+  Bestätigungston; kannst du sie nicht, wird die Lösung vorgelesen. Mit
+  automatischer **Fehlertoleranz** – Tippfehler, fehlende Artikel/Umlaute und
+  Zusatzwörter (z. B. „adv adverb“ für „Adverb“) werden trotzdem als richtig
+  gewertet.
 - **Audio-Wiedergabe** pro Vokabel: Latein → 5 s Pause → Deutsch
   (jede Pausenlänge einzeln einstellbar).
 - **Drei Spalten** je Vokabel: lateinische Grundform, deutsche Übersetzung,
@@ -40,6 +48,26 @@ keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
   Latein mehrfach wiederholen, Suche.
 - **Helles & dunkles Design**, zurückhaltend gestaltet und voll **mobil-tauglich**.
 - **Tastatur**: `Leertaste` = Play/Pause, `←` / `→` = blättern.
+
+## Abfrage-Modus im Detail
+
+Im Tab **Abfrage** erscheint nur das lateinische Wort. Tippe auf das
+Mikrofon und sag die deutsche Übersetzung:
+
+- **Richtig** → Bestätigungston, die Lösung wird kurz grün gezeigt, danach
+  geht es automatisch weiter (die Vokabel gilt als gelernt).
+- **„Lösung“** (oder „weiß nicht“ sagen) → die Übersetzung wird vorgelesen
+  und angezeigt.
+- **Auto-Mikrofon** hört nach jeder Vokabel automatisch wieder zu (hands-free).
+- **Zufall** mischt die Reihenfolge, **Gelernte überspringen** blendet bereits
+  abgehakte Vokabeln aus.
+
+Die Fehlertoleranz vergleicht nicht stur Zeichen für Zeichen, sondern
+normalisiert die Eingabe (Kleinschreibung, Artikel/Füllwörter weg, Umlaute
+und „ß“ vereinheitlicht) und erlaubt eine an die Wortlänge angepasste
+Tippfehler-Distanz. Mehrere Übersetzungen (durch Komma, Schrägstrich oder
+„oder“ getrennt) werden alle akzeptiert; gesprochene Zusatzwörter schaden
+nicht, solange das richtige Wort dabei ist.
 
 ## Lokal starten
 
