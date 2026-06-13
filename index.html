@@ -33,6 +33,7 @@
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="quiz">Sprechen</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="write">Schreiben</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="cards">Karten</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="manage">Vokabeln</button>
     </nav>
 
     <div id="view-listen" class="view">
@@ -65,7 +66,9 @@
         <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
       </div>
     </section>
+    </div><!-- /view-listen -->
 
+    <div id="view-manage" class="view" hidden>
     <!-- Settings -->
     <details class="card settings">
       <summary>Einstellungen</summary>
@@ -136,7 +139,7 @@
         oder importiere eine JSON-Datei.
       </p>
     </section>
-    </div><!-- /view-listen -->
+    </div><!-- /view-manage -->
 
     <div id="view-quiz" class="view" hidden>
       <section class="card quiz" aria-label="Abfrage">
