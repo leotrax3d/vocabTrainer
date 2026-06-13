@@ -19,6 +19,8 @@
     playSm: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.87l11-6.5a1 1 0 0 0 0-1.74l-11-6.5A1 1 0 0 0 8 5.5z"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>',
+    mic: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-3.08A7 7 0 0 0 19 11z"/></svg>',
+    speaker: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 5 6.5 9H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3.5l4.5 4a1 1 0 0 0 1.7-.75V5.75A1 1 0 0 0 11 5z"/><path d="M16 8.8a4 4 0 0 1 0 6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   };
 
   /* ---------- State ---------- */
@@ -39,9 +41,19 @@
       beep: false,
       skipDone: true,
       sort: "seq",
+      qShuffle: false,
+      qAuto: true,
+      qSkipDone: false,
       theme: "light",
     },
   };
+
+  // Abfrage-Modus (unabhängig vom Hören-Modus)
+  const quiz = { order: [], pos: -1, currentId: null, listening: false, revealed: false,
+                 correctCount: 0, completedCount: 0, finished: false, justAnswered: false };
+  let quizReco = null;
+  let quizArmed = false;   // Mikrofon mind. einmal gestartet (Berechtigung erteilt)
+  let currentView = "listen";
 
   const player = { playing: false, order: [], pos: -1, currentId: null, cancel: false, timer: null };
 
@@ -83,6 +95,14 @@
     dialog: $("editDialog"), editForm: $("editForm"), editTitle: $("editTitle"),
     fLatin: $("fLatin"), fGerman: $("fGerman"), fForms: $("fForms"), cancelEdit: $("cancelEdit"),
     toast: $("toast"),
+    // Tabs & Quiz
+    tabListen: $("tabListen"), tabQuiz: $("tabQuiz"),
+    viewListen: $("view-listen"), viewQuiz: $("view-quiz"),
+    qProgress: $("qProgress"), qHint: $("qHint"), qLatin: $("qLatin"), qHearLatin: $("qHearLatin"),
+    qStatus: $("qStatus"), qAnswer: $("qAnswer"),
+    qSolveBtn: $("qSolveBtn"), qMicBtn: $("qMicBtn"), qNextBtn: $("qNextBtn"),
+    qShuffleToggle: $("qShuffleToggle"), qAutoToggle: $("qAutoToggle"), qSkipDoneToggle: $("qSkipDoneToggle"),
+    qScore: $("qScore"), qEmptyState: $("qEmptyState"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -777,6 +797,9 @@
     el.beepToggle.checked = s.beep;
     el.skipDoneToggle.checked = s.skipDone;
     el.sortSelect.value = s.sort;
+    el.qShuffleToggle.checked = s.qShuffle;
+    el.qAutoToggle.checked = s.qAuto;
+    el.qSkipDoneToggle.checked = s.qSkipDone;
     applyTheme(s.theme);
   }
 
@@ -790,6 +813,8 @@
   function bindEvents() {
     el.prevBtn.innerHTML = ICON.prev;
     el.nextBtn.innerHTML = ICON.next;
+    el.qMicBtn.innerHTML = ICON.mic;
+    el.qHearLatin.innerHTML = ICON.speaker;
 
     el.playBtn.addEventListener("click", togglePlay);
     el.prevBtn.addEventListener("click", () => jump(-1));
@@ -851,8 +876,323 @@
       else if (e.code === "ArrowLeft") { e.preventDefault(); jump(-1); }
     });
 
+    // Tabs
+    el.tabListen.addEventListener("click", () => switchView("listen"));
+    el.tabQuiz.addEventListener("click", () => switchView("quiz"));
+
+    // Quiz-Steuerung
+    el.qMicBtn.addEventListener("click", () => { quiz.listening ? quizStopListen() : quizListen(); });
+    el.qSolveBtn.addEventListener("click", quizReveal);
+    el.qNextBtn.addEventListener("click", () => quizNext(true));
+    el.qHearLatin.addEventListener("click", quizHearLatin);
+    const qToggle = (chk, key, rebuild) => chk.addEventListener("change", () => {
+      state.settings[key] = chk.checked; save();
+      if (rebuild && currentView === "quiz") { const keepPos = quiz.pos; buildQuizOrder(); quiz.pos = Math.min(keepPos, quiz.order.length - 1); updateQuizProgress(); }
+    });
+    qToggle(el.qShuffleToggle, "qShuffle", true);
+    qToggle(el.qAutoToggle, "qAuto", false);
+    qToggle(el.qSkipDoneToggle, "qSkipDone", true);
+
     if (synth) synth.onvoiceschanged = loadVoices;
     window.addEventListener("beforeunload", () => synth && synth.cancel());
+  }
+
+  /* ============================================================
+     ABFRAGE-MODUS (eigenständig)
+     ============================================================ */
+
+  /* ---------- Tonsignale ---------- */
+  function ensureAudio() {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(freq, startOff, dur, vol, type) {
+    try {
+      const ctx = ensureAudio();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      const t = ctx.currentTime + (startOff || 0);
+      o.type = type || "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol == null ? 0.2 : vol, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t + dur);
+    } catch (e) { /* Audio nicht verfügbar */ }
+  }
+  function successTone() { tone(660, 0, 0.15, 0.2); tone(988, 0.12, 0.22, 0.2); } // freundliches Ding-Ding
+  function failTone() { tone(311, 0, 0.28, 0.16, "sine"); }
+
+  /* ---------- Fehlertolerantes Matching ---------- */
+  const STOP = new Set(["der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines", "zu", "sich", "the", "to", "a", "an"]);
+
+  function foldText(s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/ß/g, "ss")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "") // Akzente/Umlautpunkte entfernen
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  function contentTokens(s) { return foldText(s).split(" ").filter((t) => t && !STOP.has(t)); }
+  function splitVariants(s) { return (s || "").split(/[,;/]|\boder\b/i); }
+
+  function lev(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n; if (!n) return m;
+    const dp = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      let prev = dp[0]; dp[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const tmp = dp[j];
+        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return dp[n];
+  }
+  function tokenMatch(a, b) {
+    if (a === b) return true;
+    const mx = Math.max(a.length, b.length), mn = Math.min(a.length, b.length);
+    if (mn <= 3) return a === b;                       // sehr kurze Wörter: streng
+    if ((a.includes(b) || b.includes(a)) && mn >= 4) return true; // Beugung/Plural
+    const d = lev(a, b);
+    if (mx <= 5) return d <= 1;
+    if (mx <= 8) return d <= 2;
+    return d <= Math.floor(mx * 0.34);
+  }
+  // Akzeptiert „adv adverb“ für „Adverb“, ignoriert Artikel/Füllwörter, erlaubt Tippfehler-Distanz
+  function isCorrect(spoken, german) {
+    const spTokens = contentTokens(spoken);
+    if (!spTokens.length) return false;
+    const spPhrase = spTokens.join(" ");
+    for (const variant of splitVariants(german)) {
+      const vTokens = contentTokens(variant);
+      if (!vTokens.length) continue;
+      const vPhrase = vTokens.join(" ");
+      const mx = Math.max(spPhrase.length, vPhrase.length);
+      if (mx > 0 && lev(spPhrase, vPhrase) <= Math.max(1, Math.floor(mx * 0.25))) return true; // ganze Phrase ähnlich
+      if (vTokens.every((vt) => spTokens.some((st) => tokenMatch(st, vt)))) return true;        // alle Lösungswörter vorhanden
+    }
+    return false;
+  }
+  const isGiveUp = (text) => /(weiß nicht|weiss nicht|keine ahnung|keinen plan|lösung|loesung|aufgeben|verraten)/.test(foldText(text));
+
+  /* ---------- Quiz-Ablauf ---------- */
+  const currentQuizVocab = () => state.vocab[quiz.order[quiz.pos]];
+
+  function buildQuizOrder() {
+    let idx = state.vocab.map((_, i) => i);
+    if (state.settings.qSkipDone) idx = idx.filter((i) => !state.vocab[i].done);
+    if (state.settings.qShuffle) {
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [idx[i], idx[j]] = [idx[j], idx[i]];
+      }
+    }
+    quiz.order = idx;
+  }
+
+  function setQStatus(text, cls) {
+    el.qStatus.textContent = text;
+    el.qStatus.className = "q-status" + (cls ? " " + cls : "");
+  }
+  function showAnswer(text, cls) {
+    el.qAnswer.textContent = text;
+    el.qAnswer.className = "q-answer" + (cls ? " " + cls : "");
+    el.qAnswer.hidden = false;
+  }
+  function updateQuizProgress() { el.qProgress.textContent = `${quiz.pos + 1} von ${quiz.order.length}`; }
+  function updateQuizScore() {
+    el.qScore.innerHTML = quiz.completedCount
+      ? `Richtig: <strong>${quiz.correctCount}</strong> von ${quiz.completedCount}`
+      : "";
+  }
+
+  function enterQuiz() {
+    pause();                          // Hören-Wiedergabe stoppen
+    if (recognitionOn) stopVoice();   // Hören-Sprachsteuerung stoppen (nur ein Recognizer aktiv)
+    quiz.correctCount = 0; quiz.completedCount = 0; quiz.finished = false; quiz.pos = -1;
+    updateQuizScore();
+    buildQuizOrder();
+    if (!quiz.order.length) { quizRenderEmpty(); return; }
+    el.qEmptyState.hidden = true;
+    document.querySelector(".quiz").hidden = false;
+    quizNext(false);                  // erste Vokabel zeigen, noch nicht zuhören (Berechtigung via Tap)
+  }
+
+  function quizRenderEmpty() {
+    const empty = quiz.order.length === 0;
+    el.qEmptyState.hidden = !empty;
+    document.querySelector(".quiz").hidden = empty;
+  }
+
+  function quizShow() {
+    const v = currentQuizVocab();
+    if (!v) return;
+    quiz.currentId = v.id;
+    quiz.revealed = false;
+    quiz.justAnswered = false;
+    el.qLatin.textContent = v.latin;
+    el.qAnswer.hidden = true; el.qAnswer.className = "q-answer";
+    setQStatus("Sprich die deutsche Übersetzung.", "");
+    updateQuizProgress();
+  }
+
+  function quizNext(auto) {
+    quizStopListen();
+    if (synth) synth.cancel();
+    if (quiz.finished) { enterQuiz(); return; }
+    if (!quiz.order.length) { buildQuizOrder(); quiz.pos = -1; }
+    if (!quiz.order.length) { quizRenderEmpty(); return; }
+    quiz.pos++;
+    if (quiz.pos >= quiz.order.length) { quizFinish(); return; }
+    quizShow();
+    if (auto && state.settings.qAuto && quizArmed) quizListen();
+  }
+
+  function quizFinish() {
+    quizStopListen();
+    quiz.finished = true;
+    el.qLatin.textContent = "Fertig";
+    el.qAnswer.hidden = true;
+    setQStatus(`${quiz.correctCount} von ${quiz.completedCount} richtig – „Weiter“ für neue Runde.`, "is-ok");
+    el.qProgress.textContent = `${quiz.order.length} von ${quiz.order.length}`;
+  }
+
+  function ensureQuizReco() {
+    if (quizReco) return quizReco;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    quizReco = new SR();
+    quizReco.lang = "de-DE";
+    quizReco.continuous = false;
+    quizReco.interimResults = true;
+    quizReco.maxAlternatives = 5;
+    quizReco.onresult = quizRecoResult;
+    quizReco.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        toast("Mikrofon-Zugriff verweigert.");
+        quizArmed = false;
+        quizStopListen();
+      }
+    };
+    quizReco.onend = quizRecoEnd;
+    return quizReco;
+  }
+
+  function quizListen() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { toast("Spracherkennung wird in diesem Browser nicht unterstützt."); return; }
+    if (!currentQuizVocab() || quiz.revealed || quiz.finished) return;
+    ensureQuizReco();
+    ensureAudio();               // Audiokontext im Nutzer-Tap freischalten (für Töne)
+    quizArmed = true;
+    quiz.listening = true;
+    el.qMicBtn.classList.add("is-listening");
+    setQStatus("Hört zu …", "is-listening");
+    try { quizReco.start(); } catch (e) { /* läuft bereits */ }
+  }
+
+  function quizStopListen() {
+    quiz.listening = false;
+    el.qMicBtn.classList.remove("is-listening");
+    if (quizReco) { quizReco.onend = null; try { quizReco.stop(); } catch (e) {} quizReco.onend = quizRecoEnd; }
+  }
+
+  function quizRecoResult(e) {
+    let finalText = "", interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript;
+      else interim += r[0].transcript;
+    }
+    if (!finalText) {
+      if (interim.trim()) setQStatus(`„${interim.trim()} …“`, "is-listening");
+      return;
+    }
+    const last = e.results[e.results.length - 1];
+    const alts = [];
+    for (let i = 0; i < last.length; i++) alts.push(last[i].transcript);
+    quizEvaluate(alts);
+  }
+
+  function quizRecoEnd() {
+    quiz.listening = false;
+    el.qMicBtn.classList.remove("is-listening");
+    // Hände-frei: bei Stille erneut zuhören, solange im Quiz und unbeantwortet
+    if (currentView === "quiz" && state.settings.qAuto && quizArmed && !quiz.revealed && !quiz.finished && !quiz.justAnswered) {
+      setTimeout(() => {
+        if (currentView === "quiz" && !quiz.listening && !quiz.revealed && !quiz.finished) quizListen();
+      }, 250);
+    }
+  }
+
+  function quizEvaluate(alts) {
+    const v = currentQuizVocab();
+    if (!v) return;
+    if (alts.some((a) => isGiveUp(a))) { quizReveal(); return; }
+    if (alts.some((a) => isCorrect(a, v.german))) quizHandleCorrect();
+    else quizHandleWrong(alts[0] || "");
+  }
+
+  function quizHandleCorrect() {
+    const v = currentQuizVocab();
+    quiz.justAnswered = true;
+    quizStopListen();
+    successTone();
+    showAnswer(v.german, "is-ok");
+    setQStatus("Richtig!", "is-ok");
+    quiz.correctCount++; quiz.completedCount++;
+    updateQuizScore();
+    if (v && !v.done) { v.done = true; save(); renderList(); updateProgress(); } // zählt als gelernt
+    setTimeout(() => quizNext(true), 1150);
+  }
+
+  function quizHandleWrong(heard) {
+    setQStatus(heard ? `Noch nicht: „${heard}“ – nochmal oder „Lösung“.` : "Nicht verstanden – nochmal oder „Lösung“.", "is-wrong");
+    // quizRecoEnd startet (bei Auto) automatisch erneut für den nächsten Versuch
+  }
+
+  async function quizReveal() {
+    const v = currentQuizVocab();
+    if (!v) return;
+    quiz.justAnswered = true;
+    quizStopListen();
+    quiz.revealed = true;
+    quiz.completedCount++;
+    updateQuizScore();
+    showAnswer(v.german, "is-reveal");
+    setQStatus("Lösung wird vorgelesen …", "is-wrong");
+    failTone();
+    await speak(v.german, state.settings.germanVoiceURI, "de-DE");
+    if (currentView === "quiz" && state.settings.qAuto && quizArmed) setTimeout(() => quizNext(true), 700);
+  }
+
+  function quizHearLatin() {
+    const v = currentQuizVocab();
+    if (v) speak(v.latin, state.settings.latinVoiceURI, "it-IT");
+  }
+
+  /* ---------- Ansicht wechseln ---------- */
+  function switchView(view) {
+    if (view === currentView) return;
+    currentView = view;
+    const quizActive = view === "quiz";
+    el.viewListen.hidden = quizActive;
+    el.viewQuiz.hidden = !quizActive;
+    el.tabListen.classList.toggle("is-active", !quizActive);
+    el.tabQuiz.classList.toggle("is-active", quizActive);
+    el.tabListen.setAttribute("aria-selected", String(!quizActive));
+    el.tabQuiz.setAttribute("aria-selected", String(quizActive));
+    if (quizActive) {
+      enterQuiz();
+    } else {
+      quizStopListen();
+      if (synth) synth.cancel();
+    }
   }
 
   /* ---------- Init ---------- */

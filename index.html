@@ -28,6 +28,12 @@
 
   <main id="main" class="wrap">
 
+    <nav class="tabs" role="tablist" aria-label="Modus">
+      <button class="tab is-active" id="tabListen" type="button" role="tab" aria-selected="true" data-view="listen">Hören</button>
+      <button class="tab" id="tabQuiz" type="button" role="tab" aria-selected="false" data-view="quiz">Abfrage</button>
+    </nav>
+
+    <div id="view-listen" class="view">
     <!-- Player -->
     <section class="card player" aria-label="Wiedergabe">
       <div class="now-playing" id="nowPlaying">
@@ -128,6 +134,40 @@
         oder importiere eine JSON-Datei.
       </p>
     </section>
+    </div><!-- /view-listen -->
+
+    <div id="view-quiz" class="view" hidden>
+      <section class="card quiz" aria-label="Abfrage">
+        <p class="q-progress" id="qProgress" aria-live="polite">0 von 0</p>
+
+        <div class="q-prompt">
+          <p class="q-hint" id="qHint">Übersetze ins Deutsche</p>
+          <p class="q-latin" id="qLatin">—</p>
+          <button id="qHearLatin" class="q-hear" type="button" aria-label="Lateinisches Wort anhören" title="Anhören"></button>
+        </div>
+
+        <p class="q-status" id="qStatus">Tippe auf das Mikrofon und sprich die Übersetzung.</p>
+        <p class="q-answer" id="qAnswer" hidden></p>
+
+        <div class="q-controls">
+          <button id="qSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
+          <button id="qMicBtn" class="q-mic" type="button" aria-label="Antwort sprechen"></button>
+          <button id="qNextBtn" class="btn btn-ghost" type="button">Weiter</button>
+        </div>
+
+        <div class="q-toggles">
+          <label class="chip"><input type="checkbox" id="qShuffleToggle" /> Zufall</label>
+          <label class="chip"><input type="checkbox" id="qAutoToggle" checked /> Auto-Mikrofon</label>
+          <label class="chip"><input type="checkbox" id="qSkipDoneToggle" /> Gelernte überspringen</label>
+        </div>
+
+        <div class="q-score" id="qScore"></div>
+      </section>
+
+      <p class="empty-state" id="qEmptyState" hidden>
+        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
+      </p>
+    </div><!-- /view-quiz -->
   </main>
 
   <footer class="site-footer wrap">
