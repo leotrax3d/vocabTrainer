@@ -1,0 +1,54 @@
+name: vokabeltrainer
+
+services:
+  # PostgreSQL – die Vokabeldatenbank. Nur intern erreichbar.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vocab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vocab}
+      POSTGRES_DB: ${POSTGRES_DB:-vocab}
+    volumes:
+      # Persistente Speicherung der Datenbank in einem benannten Volume.
+      - vocab-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vocab} -d ${POSTGRES_DB:-vocab}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Backend – Node/Express REST-API. Nur intern erreichbar (via Frontend-Proxy).
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-vocab}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-vocab}
+      PGDATABASE: ${POSTGRES_DB:-vocab}
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    # Zum Debuggen kann das Backend direkt freigegeben werden:
+    # ports:
+    #   - "3000:3000"
+
+  # Frontend – nginx liefert die App aus und proxyt /api ans Backend.
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      # Das Web-Dashboard nach aussen auf Port 6767.
+      - "6767:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  vocab-db:

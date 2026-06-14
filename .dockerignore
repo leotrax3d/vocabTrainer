@@ -1,0 +1,7 @@
+# Build-Kontext fuer das Frontend-Image schlank halten.
+.git
+.github
+backend
+**/node_modules
+*.log
+DOCKER.md
