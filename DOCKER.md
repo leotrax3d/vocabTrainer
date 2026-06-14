@@ -6,8 +6,8 @@ mit **Docker Compose** in Betrieb:
 | Dienst     | Technik              | Aufgabe                                             | Erreichbar |
 |------------|----------------------|-----------------------------------------------------|------------|
 | `frontend` | nginx                | Liefert die Web-App aus, proxyt `/api` ans Backend  | **Host-Port 6767** |
-| `backend`  | Node.js + Express    | REST-API für die Vokabellisten                      | nur intern |
-| `db`       | PostgreSQL 16        | Vokabeldatenbank (persistentes Volume)              | nur intern |
+| `backend`  | Node.js + Express    | REST-API: Profil, Gruppen, Vokabeln, Leitner-Planung, Statistik | nur intern |
+| `db`       | PostgreSQL 16        | Datenbank für alle Daten (persistentes Volume)      | nur intern |
 
 ```
         Browser
@@ -87,17 +87,24 @@ POSTGRES_PASSWORD=bitte-aendern
 POSTGRES_DB=vocab
 ```
 
-## Nutzung im Browser
+## Funktionen (serverseitig)
 
-Im Tab **Vokabeln** erscheint mit laufendem Backend der Bereich
-**„Server-Vokabeln"**:
+Seit dem Umbau auf das Backend liegen **alle Daten in der Datenbank** – es gibt
+kein `localStorage` mehr. Profil, Gruppen, Vokabeln und der komplette
+Lernfortschritt werden vom Backend gehalten.
 
-- **Aktuelle Liste auf Server speichern** – legt die geladene Liste in der
-  Datenbank ab.
-- **Laden** / **Löschen** je gespeicherter Liste.
-- **Geladene Liste aktualisieren** – speichert Änderungen zur gerade
-  geladenen Server-Liste zurück.
+- **6-Phasen-Leitner-System:** Jede Vokabel hat ein eigenes Fälligkeitsdatum
+  (`next_review`). Richtig → eine Phase höher (1 → 2 → 4 → 7 → 14 → 30 Tage),
+  falsch → zurück in Phase 1. Beim Üben zieht das Backend alle fälligen
+  Vokabeln (`next_review <= heute`), quer über alle Phasen gemischt.
+- **Gruppen / Lektionen:** Jede Vokabel ist einer Gruppe zuordenbar; neue
+  Gruppen lassen sich direkt beim Anlegen erstellen, die Liste nach Gruppe
+  filtern.
+- **Onboarding & Gamification:** Beim ersten Start wird der Name abgefragt; das
+  **Start-Dashboard** begrüßt mit Namen und zeigt **Streak** (Tage in Folge),
+  **XP** (pro gewusster Vokabel) und die **Phasenverteilung (1–6)** als
+  Balkendiagramm.
 
-> Ohne erreichbares Backend (z. B. die statische GitHub-Pages-Variante)
-> blendet die App diesen Bereich automatisch aus und funktioniert wie gewohnt
-> rein lokal im Browser.
+> Hinweis: Die App benötigt jetzt das Backend. Das direkte Öffnen der
+> `index.html` ohne laufenden Server funktioniert nicht mehr – stattdessen
+> `docker compose up` nutzen.

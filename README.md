@@ -5,29 +5,41 @@ vorgelesen: **erst die lateinische Form, dann eine Pause, dann die deutsche
 Übersetzung**. So kannst du mitlernen, ohne auf den Bildschirm schauen zu
 müssen (z. B. unterwegs).
 
-Die App läuft standardmäßig komplett im Browser – ohne Server, ohne Anmeldung,
-ohne Tracking; deine Vokabeln werden lokal im Browser gespeichert. Optional
-gibt es ein **Docker-Setup** mit Backend und Vokabeldatenbank, um Listen
-geräteübergreifend auf einem Server zu speichern (siehe [`DOCKER.md`](DOCKER.md)).
+Die App ist eine **Client-Server-Anwendung**: Ein Web-Frontend (nginx) spricht
+über ein **Node/Express-Backend** mit einer **PostgreSQL-Datenbank**. Alle
+Daten – Profil, Vokabeln, Gruppen und der komplette Lernfortschritt – liegen
+**serverseitig** in der Datenbank (kein `localStorage` mehr). Gelernt wird nach
+einem **6-Phasen-Leitner-System**. Start in einer Zeile:
+`docker compose up -d --build`, dann <http://localhost:6767> öffnen
+(Details in [`DOCKER.md`](DOCKER.md)).
 
 ## Funktionen
 
-Vier Lern-Modi über die Tabs **Hören**, **Sprechen**, **Schreiben** und
-**Karten**; der Tab **Fortschritt** zeigt deine Auswertung, im Tab
-**Vokabeln** werden Liste und Einstellungen verwaltet.
+Auf dem **Start-Dashboard** wird mit Namen begrüßt; es zeigt Streak, XP, fällige
+Vokabeln und die Phasenverteilung. Geübt wird über die Tabs **Hören**,
+**Sprechen**, **Schreiben** und **Karten**; **Fortschritt** zeigt die
+Auswertung, im Tab **Vokabeln** werden Liste, Gruppen und Einstellungen
+verwaltet.
 
+- **6-Phasen-Leitner-System**: Jede Vokabel hat ein eigenes Fälligkeitsdatum
+  (`next_review`). Eine **richtige** Antwort hebt sie eine Phase höher und
+  verlängert die Pause bis zur nächsten Abfrage
+  (Phase 1 → 2 → 3 → 4 → 5 → 6 ≙ **1 / 2 / 4 / 7 / 14 / 30 Tage**), eine
+  **falsche** Antwort setzt sie sofort zurück in Phase 1. Beim Üben zieht das
+  Backend alle **fälligen** Vokabeln (`next_review <= heute`), **quer über alle
+  Phasen gemischt**.
+- **Gruppen / Lektionen**: Jede Vokabel ist einer Gruppe (z. B. „Lektion 2",
+  „Thema Urlaub") zuordenbar; neue Gruppen lassen sich direkt beim Anlegen
+  erstellen, die Liste nach Gruppe filtern.
+- **Profil & Gamification**: Kurzes **Onboarding** (Namensabfrage), Begrüßung
+  mit Namen, **Streak** (Tage in Folge) und **XP** (Punkte pro gewusster
+  Vokabel) mit Level.
 - **Hören** bleibt bewusst schlicht: einfach die Vokabeln der Reihe nach
-  anhören (Latein → Pause → Deutsch), ganz ohne Abfrage. Hier wird **nicht**
-  umsortiert – nur die Übungsmodi nutzen Spaced Repetition.
-- **Spaced Repetition (SM-2)**: In den Übungsmodi (Sprechen/Schreiben/Karten)
-  werden Vokabeln nach dem bewährten **SM-2-Algorithmus** geplant. Wörter, die
-  du sicher kannst, erscheinen immer seltener; falsch beantwortete kommen bald
-  wieder dran. Ohne „Zufall“ stehen fällige und neue Vokabeln automatisch
-  vorne.
-- **Fortschritt / Statistik**: Eigener Tab mit **Lern-Serie (Streak)**,
-  Tageswerten (gelernt, geübte Zeit, Trefferquote), **fälligen Wiederholungen**,
-  einem **Balkendiagramm der letzten 14 Tage**, einer Beherrschungs-Übersicht
-  (neu / am Lernen / gefestigt) und einer Liste der **schwierigsten Vokabeln**.
+  anhören (Latein → Pause → Deutsch), ganz ohne Abfrage.
+- **Fortschritt / Statistik**: Eigener Tab mit **Lern-Serie (Streak)**, **XP**,
+  **fälligen Wiederholungen**, der **Phasenverteilung (1–6)** als Balkendiagramm,
+  einem **Verlauf der letzten 14 Tage** und einer Liste der **schwierigsten
+  Vokabeln**.
 - **Favoriten**: Jede Vokabel lässt sich mit einem **Stern** markieren. Die
   Liste kann auf **Favoriten** (oder Offene/Gelernte) gefiltert werden, und in
   allen Modi gibt es **„Nur Favoriten“**, um gezielt schwierige Wörter zu üben.
@@ -91,29 +103,32 @@ Vier Lern-Modi über die Tabs **Hören**, **Sprechen**, **Schreiben** und
 ## Spaced Repetition & Fortschritt
 
 Die Übungsmodi (Sprechen, Schreiben, Karten) planen die Wiederholungen
-automatisch nach **SM-2** – demselben Prinzip wie Anki:
+**serverseitig** nach einem **6-Phasen-Leitner-System**:
 
-- Jede richtig beantwortete Vokabel bekommt ein **größeres Intervall**
-  (1 Tag → 3 Tage → wachsend je nach „Leichtigkeit“); sie taucht dadurch
-  seltener auf.
-- Eine **falsche** Antwort setzt das Intervall zurück, sodass die Vokabel
-  bald wieder abgefragt wird.
-- Solange **„Zufall“** ausgeschaltet ist, stehen **fällige und neue**
-  Vokabeln automatisch vorne – du übst also genau das, was nötig ist. Mit
-  „Zufall“ wird die Reihenfolge wie gewohnt gemischt.
+- Jede Vokabel hat ein eigenes Fälligkeitsdatum (`next_review`). Eine
+  **richtige** Antwort hebt sie eine Phase höher; das nächste Fälligkeitsdatum
+  ergibt sich aus der **neuen** Phase: **1 / 2 / 4 / 7 / 14 / 30 Tage**.
+- Eine **falsche** Antwort setzt sie sofort zurück in **Phase 1**.
+- Der Timer läuft **pro Vokabel**: Steigt Wort A heute in Phase 2 auf, ist es
+  in 2 Tagen fällig; steigt Wort B erst morgen auf, ist es erst übermorgen+1
+  fällig.
+- Beim Start einer Abfrage zieht das Backend **alle fälligen** Vokabeln
+  (`next_review <= heute`) – der Tages-Pool ist **komplett gemischt**, quer
+  über alle Phasen.
 
-Im Tab **Fortschritt** siehst du auf einen Blick:
+Im Tab **Fortschritt** (und auf dem **Start-Dashboard**) siehst du auf einen
+Blick:
 
 - **Lern-Serie (Streak)** – aufeinanderfolgende Tage mit Übung (inkl. Rekord).
-- **Heute**: gelernte Vokabeln, geübte Zeit und Trefferquote.
+- **XP** – Erfahrungspunkte pro gewusster Vokabel (mit Level).
 - **Fällig heute** – wie viele Vokabeln zur Wiederholung anstehen.
-- **Diagramm der letzten 14 Tage** (richtig/falsch je Tag).
-- **Beherrschung**: Anteil *neu* / *am Lernen* / *gefestigt*.
+- **Phasenverteilung (1–6)** – wie viele Vokabeln aktuell in welcher Phase sind,
+  als Balkendiagramm.
+- **Verlauf der letzten 14 Tage** (richtig/falsch je Tag).
 - **Schwierigste Vokabeln** – mit Trefferquote und Stern zum Markieren.
 
-Alle Werte liegen rein **lokal** im Browser und lassen sich jederzeit
-zurücksetzen (die Vokabeln bleiben dabei erhalten). Sie sind bewusst **nicht**
-Teil des Exports/Teilen-Links – diese enthalten weiterhin nur die Vokabeln.
+Alle Werte liegen **serverseitig** in der Datenbank und sind damit
+geräteübergreifend verfügbar.
 
 ## Favoriten
 
@@ -159,24 +174,11 @@ Tippfehler-Distanz. Mehrere Übersetzungen (durch Komma, Schrägstrich oder
 „oder“ getrennt) werden alle akzeptiert; gesprochene Zusatzwörter schaden
 nicht, solange das richtige Wort dabei ist.
 
-## Lokal starten
+## Starten (Docker)
 
-Einfach `index.html` im Browser öffnen – fertig. (Empfohlen: Chrome, Edge
-oder Safari; die Sprachausgabe nutzt die im Betriebssystem installierten
-Stimmen.)
-
-Wer einen lokalen Server bevorzugt:
-
-```bash
-python3 -m http.server 8000
-# dann http://localhost:8000 öffnen
-```
-
-## Mit Docker (Server-Variante)
-
-Für ein Deployment mit echtem Backend und einer persistenten
-Vokabeldatenbank liegt ein **Docker-Compose-Setup** bei (Frontend per nginx,
-Node/Express-Backend, PostgreSQL):
+Die App benötigt das Backend und die Datenbank – das direkte Öffnen von
+`index.html` reicht nicht mehr. Alles läuft per **Docker Compose** (Frontend
+per nginx, Node/Express-Backend, PostgreSQL):
 
 ```bash
 docker compose up -d --build
@@ -184,44 +186,36 @@ docker compose up -d --build
 ```
 
 Das Web-Dashboard ist nach außen über **Port 6767** erreichbar; das Backend
-spricht intern mit der Datenbank, die Vokabeln liegen in einem persistenten
-Docker-Volume. Im Tab **Vokabeln** erscheint dann der Bereich
-„Server-Vokabeln" zum Speichern/Laden von Listen auf dem Server. Alle Details
-und Befehle stehen in [`DOCKER.md`](DOCKER.md).
+spricht intern mit der Datenbank, alle Daten liegen in einem **persistenten
+Docker-Volume**. Beim ersten Start wird das Schema angelegt und eine
+Beispiel-Lektion eingespielt. Alle Details und Befehle stehen in
+[`DOCKER.md`](DOCKER.md).
 
-## Auf GitHub Pages veröffentlichen
-
-Es liegt bereits ein Workflow (`.github/workflows/deploy.yml`) bei, der die
-Seite bei jedem Push auf `main` automatisch veröffentlicht.
-
-1. Code nach GitHub pushen (Branch `main`).
-2. Im Repository: **Settings → Pages → Build and deployment → Source:
-   „GitHub Actions“** auswählen.
-3. Fertig. Nach dem nächsten Push ist die Seite erreichbar unter:
-   `https://<dein-benutzername>.github.io/<repo-name>/`
-
-Alternativ ohne Actions: **Settings → Pages → Source: „Deploy from a branch“
-→ Branch `main` / `/root`**.
+> Hinweis: Eine reine **GitHub-Pages**-Veröffentlichung (statische Dateien)
+> genügt für diese Server-Variante nicht mehr, da das Frontend ein erreichbares
+> Backend braucht.
 
 ## JSON-Format
 
 ```json
 {
-  "title": "Latein · Lektion 1",
+  "group": "Latein · Lektion 1",
   "vocab": [
-    { "latin": "caro", "german": "das Fleisch", "forms": "carnis, f." }
+    { "latin": "caro", "german": "das Fleisch", "forms": "carnis, f.", "fav": false }
   ]
 }
 ```
 
+- `group` – Name der Gruppe/Lektion, der die importierten Vokabeln zugeordnet
+  werden (alternativ wird `title` akzeptiert); fehlt beides, landet der Import
+  in der Gruppe „Import".
 - `latin` – lateinische Grundform (wird zuerst vorgelesen) — Pflicht
 - `german` – deutsche Übersetzung (wird nach der Pause vorgelesen) — Pflicht
 - `forms` – weitere Formen, optional (nur Anzeige; auf Wunsch mit vorlesbar)
-- `done` – optional `true`/`false`, ob die Vokabel abgehakt ist
 - `fav` – optional `true`, ob die Vokabel als Favorit markiert ist
 
-Ein reines Array (ohne `title`-Hülle) wird beim Import ebenfalls akzeptiert.
-Eine Beispieldatei liegt als [`beispiel-vokabeln.json`](beispiel-vokabeln.json) bei.
+Ein reines Array (ohne Hülle) wird beim Import ebenfalls akzeptiert. Eine
+Beispieldatei liegt als [`beispiel-vokabeln.json`](beispiel-vokabeln.json) bei.
 
 ### CSV-Format
 
@@ -238,8 +232,9 @@ amīcus;der Freund;amīcī, m.
 
 ## Technik
 
-Reines HTML/CSS/JavaScript ohne Build-Schritt oder Abhängigkeiten. Die
-Sprachausgabe nutzt die [Web Speech API](https://developer.mozilla.org/de/docs/Web/API/Web_Speech_API)
+**Frontend:** HTML/CSS/JavaScript ohne Build-Schritt. **Backend:** Node.js +
+Express. **Datenbank:** PostgreSQL. Ausgeliefert wird per nginx (proxyt `/api`
+ans Backend). Die Sprachausgabe nutzt die [Web Speech API](https://developer.mozilla.org/de/docs/Web/API/Web_Speech_API)
 des Browsers.
 
 > Hinweis: Es gibt kaum echte *lateinische* TTS-Stimmen. Italienisch kommt

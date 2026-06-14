@@ -1,12 +1,13 @@
 /* ============================================================
    Vokabeltrainer – Logik
-   Reine Browser-App (Web Speech API + Web Audio + localStorage).
+   Client-Server-App: alle Daten liegen serverseitig (REST-API + DB).
+   Lernplanung über ein 6-Phasen-Leitner-System (serverseitig berechnet).
    ============================================================ */
 (() => {
   "use strict";
 
   const synth = window.speechSynthesis;
-  const STORE_KEY = "vokabeltrainer.state.v1";
+  const API_BASE = "/api";
 
   /* ---------- Icons (SVG, currentColor) ---------- */
   const ICON = {
@@ -61,15 +62,16 @@
       cFavOnly: false,
       theme: "light",
     },
+    groups: [],                                  // [{ id, name, count, due }]
+    profile: { name: null, onboarded: false, xp: 0, streakCurrent: 0, streakLongest: 0 },
   };
 
-  // Lernfortschritt / Statistik (geräte-lokal, nicht Teil des Exports)
-  const progress = {
-    days: {},                                   // "JJJJ-MM-TT": { correct, wrong, learned, timeMs }
-    streak: { current: 0, longest: 0, lastDay: "" },
-    totalCorrect: 0, totalWrong: 0,
-  };
-  let lastActivityTs = 0;                        // für faire Zeitmessung (Leerlauf wird gekappt)
+  // Vom Server gelieferte Statistik (Phasenverteilung, Streak, XP, Verlauf)
+  let serverStats = { phases: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }, total: 0, dueToday: 0, today: { correct: 0, wrong: 0, learned: 0 }, days: [], xp: 0, streakCurrent: 0, streakLongest: 0, accuracy: 0 };
+
+  // Leitner-Phasen (nur zur Anzeige; die Berechnung macht das Backend)
+  const PHASE_DAYS = { 1: 1, 2: 2, 3: 4, 4: 7, 5: 14, 6: 30 };
+  const PHASE_LABEL = { 1: "Phase 1", 2: "Phase 2", 3: "Phase 3", 4: "Phase 4", 5: "Phase 5", 6: "Phase 6 · gefestigt" };
 
   // Abfrage-Modus (unabhängig vom Hören-Modus)
   const quiz = { order: [], pos: -1, currentId: null, listening: false, revealed: false,
@@ -150,11 +152,16 @@
     cDirToggle: $("cDirToggle"), cShuffleToggle: $("cShuffleToggle"), cSkipDoneToggle: $("cSkipDoneToggle"),
     cFavToggle: $("cFavToggle"), cScore: $("cScore"), cEmptyState: $("cEmptyState"),
     // Statistik
-    statsContent: $("statsContent"), statsResetBtn: $("statsResetBtn"),
-    // Server / Cloud (optional, nur mit Backend)
-    serverCard: $("serverCard"), serverList: $("serverList"), serverCount: $("serverCount"),
-    serverStatus: $("serverStatus"), serverRefreshBtn: $("serverRefreshBtn"),
-    serverSaveBtn: $("serverSaveBtn"), serverUpdateBtn: $("serverUpdateBtn"),
+    statsContent: $("statsContent"),
+    // Start / Dashboard
+    viewHome: $("view-home"), homeGreeting: $("homeGreeting"), homeStreak: $("homeStreak"),
+    homeStreakSub: $("homeStreakSub"), homeXp: $("homeXp"), homeLevel: $("homeLevel"),
+    homeDue: $("homeDue"), homeTotal: $("homeTotal"), homeToday: $("homeToday"),
+    homePhases: $("homePhases"), homeStartBtn: $("homeStartBtn"),
+    // Onboarding
+    onboardDialog: $("onboardDialog"), onboardForm: $("onboardForm"), onboardName: $("onboardName"),
+    // Gruppen (Bearbeiten-Dialog & Liste)
+    fGroup: $("fGroup"), fNewGroup: $("fNewGroup"), groupFilter: $("groupFilter"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -183,132 +190,137 @@
     toast._t = setTimeout(() => { el.toast.hidden = true; }, 2600);
   }
 
+  /* ---------- Server-Anbindung (REST) ---------- */
+  async function apiFetch(path, options) {
+    const res = await fetch(API_BASE + path, {
+      headers: { Accept: "application/json", ...(options && options.body ? { "Content-Type": "application/json" } : {}) },
+      ...options,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  // Kompletter Zustand vom Server (Profil, Gruppen, Vokabeln, Statistik).
+  async function bootstrap() {
+    const data = await apiFetch("/bootstrap");
+    applyProfile(data.profile);
+    state.groups = data.groups || [];
+    state.vocab = (data.vocab || []).map(normalize);
+    seqCounter = state.vocab.length;
+    serverStats = data.stats || serverStats;
+  }
+
+  function applyProfile(p) {
+    if (!p) return;
+    state.profile = {
+      name: p.name || null,
+      onboarded: !!p.onboarded,
+      xp: p.xp || 0,
+      streakCurrent: p.streakCurrent || 0,
+      streakLongest: p.streakLongest || 0,
+    };
+    if (p.settings && typeof p.settings === "object") Object.assign(state.settings, p.settings);
+  }
+
+  // Einstellungen serverseitig sichern – gebündelt (debounced), damit nicht
+  // jeder Schiebereglerschritt sofort eine Anfrage auslöst.
+  let settingsTimer = null;
   function save() {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({
-        vocab: state.vocab, title: state.title, settings: state.settings, progress,
-      }));
-    } catch (e) { /* Speicher evtl. voll/blockiert */ }
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(() => {
+      apiFetch("/profile", { method: "PUT", body: JSON.stringify({ settings: state.settings }) }).catch(() => {});
+    }, 500);
   }
 
-  function load() {
-    try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return false;
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.vocab)) state.vocab = data.vocab.map(normalize);
-      if (typeof data.title === "string") state.title = data.title;
-      if (data.settings) Object.assign(state.settings, data.settings);
-      if (data.progress) {
-        if (data.progress.days && typeof data.progress.days === "object") progress.days = data.progress.days;
-        if (data.progress.streak) Object.assign(progress.streak, data.progress.streak);
-        progress.totalCorrect = Number(data.progress.totalCorrect) || 0;
-        progress.totalWrong = Number(data.progress.totalWrong) || 0;
-      }
-      return true;
-    } catch (e) { return false; }
+  async function refreshGroups() {
+    try { state.groups = await apiFetch("/groups"); } catch (e) {}
   }
 
+  // Eine vom Server gelieferte Vokabel in das lokale Arbeitsformat bringen.
   function normalize(v) {
     return {
-      id: v.id || uid(),
-      seq: Number.isFinite(v.seq) ? v.seq : seqCounter++,
+      id: v.id,
+      seq: Number.isFinite(v.seq) ? v.seq : (Number.isFinite(v.id) ? v.id : seqCounter++),
+      groupId: v.groupId ?? v.group_id ?? null,
+      groupName: v.groupName ?? v.group_name ?? null,
       latin: String(v.latin ?? "").trim(),
       german: String(v.german ?? "").trim(),
       forms: String(v.forms ?? "").trim(),
-      done: !!v.done,
       fav: !!v.fav,
-      // SM-2 Spaced Repetition
-      sm2: {
-        interval: Number.isFinite(v.sm2?.interval) ? v.sm2.interval : 0,
-        easiness: Number.isFinite(v.sm2?.easiness) ? Math.max(1.3, v.sm2.easiness) : 2.5,
-        repetitions: Number.isFinite(v.sm2?.repetitions) ? v.sm2.repetitions : 0,
-        lastReview: Number.isFinite(v.sm2?.lastReview) ? v.sm2.lastReview : 0,
-      },
-      // Trefferstatistik (für Auswertung)
-      stats: {
-        seen: Number.isFinite(v.stats?.seen) ? v.stats.seen : 0,
-        correct: Number.isFinite(v.stats?.correct) ? v.stats.correct : 0,
-        wrong: Number.isFinite(v.stats?.wrong) ? v.stats.wrong : 0,
-      },
+      done: !!v.done,
+      // Leitner-Phase (1–6) und Fälligkeit – serverseitig berechnet
+      phase: Number.isFinite(v.phase) ? v.phase : 1,
+      nextReview: v.nextReview || v.next_review || null,
+      due: v.due != null ? !!v.due : true,
+      seen: Number(v.seen) || 0,
+      correct: Number(v.correct) || 0,
+      wrong: Number(v.wrong) || 0,
     };
   }
 
-  /* ---------- SM-2 Spaced Repetition ---------- */
-  function daysSinceReview(v) {
-    if (!v.sm2.lastReview) return 999; // nie überprüft = sofort fällig
-    return Math.floor((Date.now() - v.sm2.lastReview) / (1000 * 60 * 60 * 24));
+  /* ---------- Leitner-Abfrage (serverseitig) ----------
+     Die Phasenlogik (richtig → eine Phase rauf, falsch → zurück in Phase 1)
+     und das neue Fälligkeitsdatum berechnet ausschließlich das Backend.
+     Hier wird nur die Antwort gemeldet und der lokale Zustand nachgezogen. */
+  async function recordReview(v, correct) {
+    if (!v) return;
+    try {
+      const r = await apiFetch("/review/" + v.id, { method: "POST", body: JSON.stringify({ correct: !!correct }) });
+      if (r && r.vocab) {
+        v.phase = r.vocab.phase; v.nextReview = r.vocab.nextReview; v.due = r.vocab.due;
+        v.seen = r.vocab.seen; v.correct = r.vocab.correct; v.wrong = r.vocab.wrong;
+      }
+      if (r && r.profile) applyProfile(r.profile);
+    } catch (e) { /* offline o. ä. – die Sitzung läuft trotzdem weiter */ }
+    refreshDashboard();
   }
 
-  function updateSM2Correct(v) {
-    const { sm2 } = v;
-    sm2.repetitions++;
-    if (sm2.repetitions === 1) {
-      sm2.interval = 1;
-    } else if (sm2.repetitions === 2) {
-      sm2.interval = 3;
-    } else {
-      sm2.interval = Math.round(sm2.interval * sm2.easiness);
-    }
-    sm2.lastReview = Date.now();
+  // Vokabel als „gelernt/abgehakt" markieren (separat vom Leitner-Phase-Stand).
+  function markDone(v, done) {
+    if (!v || v.done === done) return;
+    v.done = done;
+    apiUpdateVocab(v.id, { done }).then(replaceLocalVocab).catch(() => {});
   }
 
-  function updateSM2Wrong(v) {
-    const { sm2 } = v;
-    sm2.repetitions = 0;
-    sm2.interval = 1;
-    sm2.lastReview = Date.now();
+  const dueCount = () => serverStats.dueToday || 0;
+
+  // Statistik nachladen und abhängige Ansichten (Start/Fortschritt) auffrischen.
+  async function refreshDashboard() {
+    try { serverStats = await apiFetch("/stats"); } catch (e) {}
+    applyProfileStats();
+    updateHome();
+    if (currentView === "stats") renderStats();
   }
 
-  function isDueForReview(v) {
-    return daysSinceReview(v) >= v.sm2.interval;
+  // Profilwerte aus der Statistik übernehmen (XP/Streak sind dort konsistent).
+  function applyProfileStats() {
+    state.profile.xp = serverStats.xp || state.profile.xp;
+    state.profile.streakCurrent = serverStats.streakCurrent ?? state.profile.streakCurrent;
+    state.profile.streakLongest = serverStats.streakLongest ?? state.profile.streakLongest;
   }
-  const dueCount = () => state.vocab.filter(isDueForReview).length;
 
-  /* ---------- Statistik / Streak / Zeit ---------- */
-  function dayKey(ts) {
-    const d = ts ? new Date(ts) : new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  /* ---------- Vokabel-Mutationen (Server) ---------- */
+  async function apiCreateVocab(payload) { return normalize(await apiFetch("/vocab", { method: "POST", body: JSON.stringify(payload) })); }
+  async function apiUpdateVocab(id, patch) { return normalize(await apiFetch("/vocab/" + id, { method: "PUT", body: JSON.stringify(patch) })); }
+  async function apiDeleteVocab(id) { await apiFetch("/vocab/" + id, { method: "DELETE" }); }
+
+  // Eine aktualisierte Vokabel im lokalen state.vocab ersetzen.
+  function replaceLocalVocab(updated) {
+    if (!updated) return;
+    const i = state.vocab.findIndex((x) => x.id === updated.id);
+    if (i >= 0) state.vocab[i] = updated; else state.vocab.push(updated);
   }
-  function todayRecord() {
-    const k = dayKey();
-    if (!progress.days[k]) progress.days[k] = { correct: 0, wrong: 0, learned: 0, timeMs: 0 };
-    return progress.days[k];
+
+  function toggleFav(v) {
+    if (!v) return;
+    v.fav = !v.fav;
+    apiUpdateVocab(v.id, { fav: v.fav }).then(replaceLocalVocab).catch(() => {});
   }
-  function touchStreak() {
-    const today = dayKey();
-    const st = progress.streak;
-    if (st.lastDay === today) return;
-    const yesterday = dayKey(Date.now() - 86400000);
-    st.current = st.lastDay === yesterday ? st.current + 1 : 1;
-    st.lastDay = today;
-    if (st.current > st.longest) st.longest = st.current;
-  }
-  // Zeit nur in kurzen, aktiven Abschnitten zählen (Leerlauf > 90 s wird ignoriert)
-  function tickTime() {
-    const now = Date.now();
-    if (lastActivityTs && now - lastActivityTs < 90000) todayRecord().timeMs += now - lastActivityTs;
-    lastActivityTs = now;
-  }
-  // Eine beantwortete Vokabel verbuchen (correct = true/false)
-  function recordAnswer(v, correct) {
-    touchStreak();
-    tickTime();
-    const rec = todayRecord();
-    if (correct) { rec.correct++; progress.totalCorrect++; }
-    else { rec.wrong++; progress.totalWrong++; }
-    if (v) { v.stats.seen++; if (correct) v.stats.correct++; else v.stats.wrong++; }
-  }
-  function recordLearned() { todayRecord().learned++; }
-  function resetProgress() {
-    progress.days = {};
-    progress.streak = { current: 0, longest: 0, lastDay: "" };
-    progress.totalCorrect = 0; progress.totalWrong = 0;
-    state.vocab.forEach((v) => {
-      v.stats = { seen: 0, correct: 0, wrong: 0 };
-      v.sm2 = { interval: 0, easiness: 2.5, repetitions: 0, lastReview: 0 };
-    });
-    save();
+
+  async function setAllDone(done) {
+    try { await apiFetch("/vocab-done/all", { method: "PUT", body: JSON.stringify({ done }) }); } catch (e) {}
+    state.vocab.forEach((v) => { v.done = done; });
   }
 
   /* ---------- Haptisches Feedback (Vibration, mobil) ---------- */
@@ -558,7 +570,7 @@
 
   function markCurrentKnown() {
     const v = state.vocab.find((x) => x.id === player.currentId);
-    if (v) { v.done = true; save(); renderList(); }
+    if (v) { markDone(v, true); renderList(); }
     jump(1);
   }
 
@@ -585,27 +597,6 @@
     }
   }
 
-  function checkSharedDeck() {
-    const m = location.hash.match(/deck=([^&]+)/);
-    if (!m) return;
-    try {
-      const data = JSON.parse(b64decode(decodeURIComponent(m[1])));
-      const arr = (data.v || []).map(([latin, german, forms]) => ({ latin, german, forms }));
-      if (arr.length) {
-        const ok = state.vocab.length ? window.confirm("Geteilte Vokabelliste laden? Deine aktuelle Liste wird ersetzt.") : true;
-        if (ok) {
-          state.title = data.t || "Geteilte Liste";
-          seqCounter = 0;
-          state.vocab = arr.map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
-          seqCounter = state.vocab.length;
-          applyDeckTitle(); save();
-          toast(`${state.vocab.length} Vokabeln aus Link geladen.`);
-        }
-      }
-    } catch (e) { /* ungültiger Link */ }
-    history.replaceState(null, "", location.pathname + location.search);
-  }
-
   /* ---------- Abspiel-Reihenfolge (Hören) ----------
      Bewusst schlicht: einfaches Durchhören in Listenreihenfolge.
      Kein Spaced-Repetition-Umsortieren – das gibt es nur in den
@@ -626,32 +617,22 @@
   /* ---------- Spaced Repetition: Reihenfolge für Übungsmodi ----------
      Fällige Vokabeln zuerst (am längsten überfällig zuerst), dann der Rest
      in Listenreihenfolge. So tauchen schwache/neue Wörter häufiger auf. */
-  function srSort(idx) {
-    return idx.sort((a, b) => {
-      const vA = state.vocab[a], vB = state.vocab[b];
-      const dueA = isDueForReview(vA), dueB = isDueForReview(vB);
-      if (dueA !== dueB) return dueA ? -1 : 1;
-      if (dueA && dueB) {
-        const ovA = daysSinceReview(vA) - vA.sm2.interval;
-        const ovB = daysSinceReview(vB) - vB.sm2.interval;
-        if (ovA !== ovB) return ovB - ovA;          // stärker überfällig zuerst
-      }
-      return vA.seq - vB.seq;
-    });
-  }
-
-  // Gemeinsamer Filter+Sortier-Helfer für die Übungsmodi
-  function buildPracticeOrder({ skipDone, favOnly, shuffle }) {
-    let idx = state.vocab.map((_, i) => i);
-    if (skipDone) idx = idx.filter((i) => !state.vocab[i].done);
-    if (favOnly) idx = idx.filter((i) => state.vocab[i].fav);
-    if (shuffle) {
-      for (let i = idx.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [idx[i], idx[j]] = [idx[j], idx[i]];
-      }
-    } else {
-      srSort(idx);                                   // ohne Zufall: Spaced Repetition
+  // Übungs-Pool (Leitner): fällige Vokabeln (next_review ≤ heute), komplett
+  // gemischt – quer über alle Phasen. Sind keine fällig, wird der gesamte
+  // Bestand geübt, damit die Modi nie leer laufen.
+  function buildPracticeOrder({ skipDone, favOnly }) {
+    const pick = (onlyDue) => {
+      let idx = state.vocab.map((_, i) => i);
+      if (onlyDue) idx = idx.filter((i) => state.vocab[i].due);
+      if (skipDone) idx = idx.filter((i) => !state.vocab[i].done);
+      if (favOnly) idx = idx.filter((i) => state.vocab[i].fav);
+      return idx;
+    };
+    let idx = pick(true);
+    if (!idx.length) idx = pick(false);
+    for (let i = idx.length - 1; i > 0; i--) {        // Tages-Mix: immer mischen
+      const j = Math.floor(Math.random() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
     }
     return idx;
   }
@@ -839,11 +820,16 @@
     }
   }
 
+  function matchesGroup(v) {
+    const g = el.groupFilter ? el.groupFilter.value : "all";
+    return !g || g === "all" || String(v.groupId) === g;
+  }
+
   function renderList() {
     sortVocab();
     const q = el.search.value.trim().toLowerCase();
     el.list.innerHTML = "";
-    const filtered = state.vocab.filter((v) => passesFilter(v) && (
+    const filtered = state.vocab.filter((v) => passesFilter(v) && matchesGroup(v) && (
       !q || v.latin.toLowerCase().includes(q) || v.german.toLowerCase().includes(q) || v.forms.toLowerCase().includes(q)
     ));
 
@@ -872,21 +858,28 @@
       const cb = document.createElement("input");
       cb.type = "checkbox"; cb.className = "vi-check"; cb.checked = v.done;
       cb.setAttribute("aria-label", `„${v.latin}“ als gelernt markieren`);
-      cb.addEventListener("change", () => { v.done = cb.checked; save(); renderList(); updateProgress(); });
+      cb.addEventListener("change", () => { markDone(v, cb.checked); renderList(); updateProgress(); });
 
       const text = document.createElement("div");
       text.className = "vi-text";
       text.innerHTML =
         `<div class="vi-latin"></div><div class="vi-german"></div>` +
-        (v.forms ? `<div class="vi-forms"></div>` : "");
+        (v.forms ? `<div class="vi-forms"></div>` : "") +
+        `<div class="vi-meta"></div>`;
       text.querySelector(".vi-latin").textContent = v.latin;
       text.querySelector(".vi-german").textContent = v.german;
       if (v.forms) text.querySelector(".vi-forms").textContent = v.forms;
+      const meta = text.querySelector(".vi-meta");
+      meta.innerHTML =
+        (v.groupName ? `<span class="vi-group"></span>` : "") +
+        `<span class="vi-phase phase-${v.phase}">${PHASE_LABEL[v.phase] || ("Phase " + v.phase)}</span>` +
+        (v.due ? `<span class="vi-due">fällig</span>` : "");
+      if (v.groupName) meta.querySelector(".vi-group").textContent = v.groupName;
 
       const actions = document.createElement("div");
       actions.className = "vi-actions";
       const favBtn = mkBtn(v.fav ? ICON.starFilled : ICON.star, v.fav ? "Favorit entfernen" : "Als Favorit markieren", () => {
-        v.fav = !v.fav; save(); renderList();
+        toggleFav(v); renderList();
       });
       favBtn.classList.add("vi-star");
       if (v.fav) favBtn.classList.add("is-fav");
@@ -918,35 +911,52 @@
     el.fLatin.value = v ? v.latin : "";
     el.fGerman.value = v ? v.german : "";
     el.fForms.value = v ? v.forms : "";
+    populateGroupControls();
+    if (el.fNewGroup) el.fNewGroup.value = "";
+    if (el.fGroup) el.fGroup.value = v && v.groupId ? String(v.groupId) : "";
     el.dialog.showModal();
     el.fLatin.focus();
   }
 
-  function submitEdit(e) {
+  async function submitEdit(e) {
     e.preventDefault();
-    const data = { latin: el.fLatin.value.trim(), german: el.fGerman.value.trim(), forms: el.fForms.value.trim() };
-    if (!data.latin || !data.german) return;
-    if (editingId) {
-      const v = state.vocab.find((x) => x.id === editingId);
-      if (v) Object.assign(v, data);
-    } else {
-      state.vocab.push(normalize(data));
-    }
+    const latin = el.fLatin.value.trim(), german = el.fGerman.value.trim();
+    if (!latin || !german) return;
+    const payload = { latin, german, forms: el.fForms.value.trim() };
+    const newGroup = el.fNewGroup ? el.fNewGroup.value.trim() : "";
+    const groupSel = el.fGroup ? el.fGroup.value : "";
+    if (newGroup) payload.groupName = newGroup;
+    else payload.groupId = groupSel ? Number(groupSel) : null;
     el.dialog.close();
-    save(); renderList(); updateProgress();
+    try {
+      if (editingId) replaceLocalVocab(await apiUpdateVocab(editingId, payload));
+      else state.vocab.push(await apiCreateVocab(payload));
+      await refreshGroups();
+      renderList(); updateProgress(); populateGroupControls(); updateHome();
+      toast(editingId ? "Gespeichert." : "Vokabel hinzugefügt.");
+    } catch (err) { toast("Speichern fehlgeschlagen."); }
   }
 
-  function removeVocab(id) {
-    state.vocab = state.vocab.filter((v) => v.id !== id);
-    save(); renderList(); updateProgress();
+  async function removeVocab(id) {
+    if (!window.confirm("Diese Vokabel löschen?")) return;
+    try {
+      await apiDeleteVocab(id);
+      state.vocab = state.vocab.filter((v) => v.id !== id);
+      await refreshGroups();
+      renderList(); updateProgress(); populateGroupControls(); updateHome();
+    } catch (e) { toast("Löschen fehlgeschlagen."); }
   }
 
   /* ---------- Import / Export ---------- */
   function exportJSON() {
     const payload = {
-      title: state.title,
-      vocab: state.vocab.map(({ latin, german, forms, done, fav }) =>
-        fav ? { latin, german, forms, done, fav } : { latin, german, forms, done }),
+      title: "Vokabeln",
+      vocab: state.vocab.map(({ latin, german, forms, fav, groupName }) => {
+        const o = { latin, german, forms };
+        if (fav) o.fav = true;
+        if (groupName) o.group = groupName;
+        return o;
+      }),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -989,27 +999,25 @@
 
   function importFile(file) {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = String(reader.result);
       const isCsv = /\.csv$/i.test(file.name) || !/^\s*[\[{]/.test(text);
+      const baseName = file.name.replace(/\.[^.]+$/, "");
       try {
-        let arr, title;
+        let arr, groupName;
         if (isCsv) {
           arr = parseCSV(text);
           if (!arr.length) throw new Error("Keine Zeilen erkannt.");
+          groupName = baseName;
         } else {
           const data = JSON.parse(text);
           arr = Array.isArray(data) ? data : data.vocab;
           if (!Array.isArray(arr)) throw new Error("Kein Vokabel-Array gefunden.");
-          title = data.title;
+          groupName = data.group || data.title || baseName;
         }
-        if (title) state.title = title;
-        seqCounter = 0;
-        state.vocab = arr.map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
-        seqCounter = state.vocab.length;
-        applyDeckTitle();
-        save(); renderList(); updateProgress();
-        toast(`${state.vocab.length} Vokabeln importiert.`);
+        const res = await apiFetch("/import", { method: "POST", body: JSON.stringify({ groupName: groupName || "Import", vocab: arr }) });
+        await reloadAll();
+        toast(`${res.imported} Vokabeln importiert.`);
       } catch (err) {
         toast("Import fehlgeschlagen: Datei nicht lesbar.");
       }
@@ -1017,17 +1025,45 @@
     reader.readAsText(file);
   }
 
-  function loadSample() {
-    state.title = SAMPLE.title;
-    seqCounter = 0;
-    state.vocab = SAMPLE.vocab.map((v, i) => normalize({ ...v, seq: i }));
-    seqCounter = state.vocab.length;
-    applyDeckTitle();
-    save(); renderList(); updateProgress();
-    toast("Beispiel geladen.");
+  async function loadSample() {
+    try {
+      const res = await apiFetch("/import", { method: "POST", body: JSON.stringify({ groupName: "Beispiel", vocab: SAMPLE.vocab }) });
+      await reloadAll();
+      toast(`Beispiel geladen (${res.imported} Vokabeln).`);
+    } catch (e) { toast("Konnte Beispiel nicht laden."); }
   }
 
   function applyDeckTitle() { if (el.deckTitle) el.deckTitle.textContent = state.title; }
+
+  // Nach größeren Änderungen den kompletten Zustand neu laden.
+  async function reloadAll() {
+    try { await bootstrap(); } catch (e) {}
+    renderList(); updateProgress(); populateGroupControls(); updateHome();
+  }
+
+  // Gruppen-Auswahl (Bearbeiten-Dialog) und Gruppen-Filter (Liste) befüllen.
+  function populateGroupControls() {
+    if (el.fGroup) {
+      const cur = el.fGroup.value;
+      el.fGroup.innerHTML = '<option value="">— ohne Gruppe —</option>';
+      state.groups.forEach((g) => {
+        const o = document.createElement("option");
+        o.value = String(g.id); o.textContent = g.name;
+        el.fGroup.appendChild(o);
+      });
+      el.fGroup.value = cur;
+    }
+    if (el.groupFilter) {
+      const cur = el.groupFilter.value || "all";
+      el.groupFilter.innerHTML = '<option value="all">Alle Gruppen</option>';
+      state.groups.forEach((g) => {
+        const o = document.createElement("option");
+        o.value = String(g.id); o.textContent = `${g.name} (${g.count})`;
+        el.groupFilter.appendChild(o);
+      });
+      el.groupFilter.value = state.groups.some((g) => String(g.id) === cur) ? cur : "all";
+    }
+  }
 
   /* ---------- Settings UI ---------- */
   function applySettingsToUI() {
@@ -1116,11 +1152,12 @@
 
     el.sortSelect.addEventListener("change", () => { state.settings.sort = el.sortSelect.value; save(); renderList(); });
     if (el.filterSelect) el.filterSelect.addEventListener("change", () => { state.settings.filter = el.filterSelect.value; save(); renderList(); });
+    if (el.groupFilter) el.groupFilter.addEventListener("change", renderList);
     el.search.addEventListener("input", renderList);
 
     el.addBtn.addEventListener("click", () => openEdit(null));
-    el.checkAllBtn.addEventListener("click", () => { state.vocab.forEach((v) => v.done = true); save(); renderList(); updateProgress(); });
-    el.uncheckAllBtn.addEventListener("click", () => { state.vocab.forEach((v) => v.done = false); save(); renderList(); updateProgress(); });
+    el.checkAllBtn.addEventListener("click", async () => { await setAllDone(true); renderList(); updateProgress(); });
+    el.uncheckAllBtn.addEventListener("click", async () => { await setAllDone(false); renderList(); updateProgress(); });
 
     el.exportBtn.addEventListener("click", exportJSON);
     el.importBtn.addEventListener("click", () => el.fileInput.click());
@@ -1129,9 +1166,8 @@
     el.sampleBtn.addEventListener("click", loadSample);
     el.emptySample.addEventListener("click", loadSample);
 
-    if (el.serverRefreshBtn) el.serverRefreshBtn.addEventListener("click", serverRefreshLists);
-    if (el.serverSaveBtn) el.serverSaveBtn.addEventListener("click", serverSaveCurrent);
-    if (el.serverUpdateBtn) el.serverUpdateBtn.addEventListener("click", serverUpdateLoaded);
+    if (el.onboardForm) el.onboardForm.addEventListener("submit", submitOnboard);
+    if (el.homeStartBtn) el.homeStartBtn.addEventListener("click", () => switchView("quiz"));
 
     el.voiceToggle.addEventListener("change", () => { el.voiceToggle.checked ? startVoice() : stopVoice(); });
 
@@ -1214,21 +1250,8 @@
     cToggle(el.cSkipDoneToggle, "cSkipDone");
     if (el.cFavToggle) cToggle(el.cFavToggle, "cFavOnly");
 
-    // Statistik
-    if (el.statsResetBtn) el.statsResetBtn.addEventListener("click", () => {
-      if (confirm("Wirklich alle Lernstatistiken und den Wiederholungsplan zurücksetzen? Die Vokabeln bleiben erhalten.")) {
-        resetProgress(); renderStats(); toast("Statistik zurückgesetzt.");
-      }
-    });
-
-    // Zeitmessung beim Verlassen/Wechseln der Seite sauber verbuchen
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden && PRACTICE.has(currentView)) { tickTime(); save(); }
-      else if (!document.hidden && PRACTICE.has(currentView)) lastActivityTs = Date.now();
-    });
-
     if (synth) synth.onvoiceschanged = loadVoices;
-    window.addEventListener("beforeunload", () => { if (PRACTICE.has(currentView)) { tickTime(); save(); } synth && synth.cancel(); });
+    window.addEventListener("beforeunload", () => { synth && synth.cancel(); });
   }
 
   /* ============================================================
@@ -1514,10 +1537,9 @@
     setQStatus("Richtig!", "is-ok");
     quiz.correctCount++; quiz.completedCount++;
     if (v) {
-      updateSM2Correct(v);
-      recordAnswer(v, true);
-      if (!v.done) { v.done = true; recordLearned(); renderList(); updateProgress(); }
-      save();
+      recordReview(v, true);              // Leitner: eine Phase rauf (serverseitig)
+      markDone(v, true);
+      renderList(); updateProgress();
     }
     updateQuizScore();
     setTimeout(() => quizNext(true), 1150);
@@ -1536,11 +1558,7 @@
     quizStopListen();
     quiz.revealed = true;
     quiz.completedCount++;
-    if (v) {
-      updateSM2Wrong(v);
-      recordAnswer(v, false);
-      save();
-    }
+    if (v) recordReview(v, false);        // Leitner: zurück in Phase 1 (serverseitig)
     haptic("wrong");
     updateQuizScore();
     showAnswer(v.german, "is-reveal");
@@ -1638,10 +1656,9 @@
       showWAnswer(writeTarget(v), "is-ok");
       setWStatus("Richtig! Enter für weiter.", "is-ok");
       if (v) {
-        updateSM2Correct(v);
-        recordAnswer(v, true);
-        if (!state.settings.wDir && !v.done) { v.done = true; recordLearned(); renderList(); updateProgress(); }
-        save();
+        recordReview(v, true);
+        if (!state.settings.wDir) markDone(v, true);
+        renderList(); updateProgress();
       }
     } else {
       el.wInput.className = "w-input is-wrong";
@@ -1662,11 +1679,7 @@
     setWStatus("Lösung – Enter für weiter.", "is-wrong");
     failTone();
     haptic("wrong");
-    if (v) {
-      updateSM2Wrong(v);
-      recordAnswer(v, false);
-      save();
-    }
+    if (v) recordReview(v, false);
     if (state.settings.wDir) speak(v.latin, state.settings.latinVoiceURI, "it-IT");
     else speak(v.german, state.settings.germanVoiceURI, "de-DE");
   }
@@ -1743,14 +1756,10 @@
   function cardsMark(known) {
     const v = currentCardVocab();
     if (v) {
-      if (known) { updateSM2Correct(v); recordAnswer(v, true); haptic("ok"); }
-      else { updateSM2Wrong(v); recordAnswer(v, false); haptic("wrong"); }
-      if (v.done !== known) {
-        v.done = known;
-        if (known) recordLearned();
-        renderList(); updateProgress();
-      }
-      save();
+      recordReview(v, known);            // Leitner: gewusst -> Phase rauf, sonst Phase 1
+      haptic(known ? "ok" : "wrong");
+      markDone(v, known);
+      renderList(); updateProgress();
     }
     updateCardsScore();
     if (state.settings.cSkipDone && known) {
@@ -1813,39 +1822,45 @@
     }
 
     const learned = state.vocab.filter((v) => v.done).length;
-    const rec = progress.days[dayKey()] || { correct: 0, wrong: 0, learned: 0, timeMs: 0 };
-    const totC = progress.totalCorrect, totW = progress.totalWrong;
+    const today = serverStats.today || { correct: 0, wrong: 0, learned: 0 };
 
-    // Beherrschung nach SM-2-Wiederholungen
-    let neu = 0, lernen = 0, fest = 0;
-    for (const v of state.vocab) {
-      const r = v.sm2.repetitions;
-      if (r === 0) neu++; else if (r <= 2) lernen++; else fest++;
-    }
-
-    /* --- Serie (Streak) + Heute --- */
+    /* --- Kennzahlen: Serie, XP, Heute, Fällig --- */
     const top = statSection("");
     top.classList.add("stats-top");
     const grid = document.createElement("div");
     grid.className = "stats-grid";
     grid.append(
-      statTile("Tage in Serie", String(progress.streak.current), progress.streak.longest ? `längste: ${progress.streak.longest}` : ""),
-      statTile("Heute gelernt", String(rec.learned), `${fmtDuration(rec.timeMs)} geübt`),
-      statTile("Heute richtig", pct(rec.correct, rec.correct + rec.wrong), `${rec.correct} von ${rec.correct + rec.wrong}`),
-      statTile("Fällig heute", String(dueCount()), "zur Wiederholung"),
+      statTile("Tage in Serie", String(serverStats.streakCurrent || 0), serverStats.streakLongest ? `längste: ${serverStats.streakLongest}` : ""),
+      statTile("XP", String(serverStats.xp || 0), "Level " + xpLevel(serverStats.xp)),
+      statTile("Heute richtig", pct(today.correct, today.correct + today.wrong), `${today.correct} von ${today.correct + today.wrong}`),
+      statTile("Fällig heute", String(serverStats.dueToday || 0), "zur Wiederholung"),
     );
     top.appendChild(grid);
     c.appendChild(top);
+
+    /* --- Phasenverteilung (Leitner 1–6) --- */
+    const phSec = statSection("Vokabeln je Lern-Phase");
+    const phWrap = document.createElement("div");
+    phWrap.className = "phase-chart";
+    renderPhaseChart(phWrap);
+    phSec.appendChild(phWrap);
+    const phFoot = document.createElement("p");
+    phFoot.className = "stats-foot";
+    phFoot.textContent = "Richtig = eine Phase höher (längere Pause bis zur nächsten Abfrage), falsch = zurück in Phase 1.";
+    phSec.appendChild(phFoot);
+    c.appendChild(phSec);
 
     /* --- Aktivität der letzten 14 Tage --- */
     const chartSec = statSection("Letzte 14 Tage");
     const chart = document.createElement("div");
     chart.className = "chart";
+    const byDay = {};
+    (serverStats.days || []).forEach((d) => { byDay[d.day] = d; });
+    const isoDay = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
     const days = [];
     for (let i = 13; i >= 0; i--) {
       const ts = Date.now() - i * 86400000;
-      const k = dayKey(ts);
-      const d = progress.days[k] || { correct: 0, wrong: 0 };
+      const d = byDay[isoDay(ts)] || { correct: 0, wrong: 0 };
       days.push({ ts, correct: d.correct, wrong: d.wrong, total: d.correct + d.wrong });
     }
     const maxTotal = Math.max(1, ...days.map((d) => d.total));
@@ -1884,40 +1899,19 @@
     chartSec.appendChild(legend);
     c.appendChild(chartSec);
 
-    /* --- Beherrschung + Gesamt --- */
-    const mSec = statSection("Beherrschung");
-    const bars = document.createElement("div");
-    bars.className = "mastery";
-    const mrow = (label, n, cls) => {
-      const row = document.createElement("div"); row.className = "m-row";
-      const head = document.createElement("div"); head.className = "m-head";
-      const nm = document.createElement("span"); nm.textContent = label;
-      const ct = document.createElement("span"); ct.className = "m-count"; ct.textContent = String(n);
-      head.append(nm, ct);
-      const track = document.createElement("div"); track.className = "m-track";
-      const fill = document.createElement("div"); fill.className = "m-fill " + cls;
-      fill.style.width = total ? `${Math.round((n / total) * 100)}%` : "0%";
-      track.appendChild(fill);
-      row.append(head, track);
-      return row;
-    };
-    bars.append(
-      mrow("Neu", neu, "m-new"),
-      mrow("Am Lernen", lernen, "m-learn"),
-      mrow("Gefestigt", fest, "m-firm"),
-    );
-    mSec.appendChild(bars);
+    /* --- Gesamt --- */
+    const gSec = statSection("");
     const overall = document.createElement("p");
     overall.className = "stats-foot";
-    overall.textContent = `Insgesamt ${pct(totC, totC + totW)} richtig (${totC} von ${totC + totW} Antworten) · ${learned} von ${total} abgehakt.`;
-    mSec.appendChild(overall);
-    c.appendChild(mSec);
+    overall.textContent = `Insgesamt ${serverStats.accuracy || 0} % richtig (${serverStats.learnedTotal || 0} von ${serverStats.answered || 0} Antworten) · ${learned} von ${total} abgehakt.`;
+    gSec.appendChild(overall);
+    c.appendChild(gSec);
 
     /* --- Schwierige Vokabeln --- */
     const weak = state.vocab
-      .filter((v) => v.stats.seen > 0 && v.stats.wrong > 0)
-      .map((v) => ({ v, acc: v.stats.correct / v.stats.seen }))
-      .sort((a, b) => a.acc - b.acc || b.v.stats.wrong - a.v.stats.wrong)
+      .filter((v) => v.seen > 0 && v.wrong > 0)
+      .map((v) => ({ v, acc: v.correct / v.seen }))
+      .sort((a, b) => a.acc - b.acc || b.v.wrong - a.v.wrong)
       .slice(0, 6);
     if (weak.length) {
       const wSec = statSection("Diese fallen schwer");
@@ -1933,7 +1927,7 @@
         const sc = document.createElement("span"); sc.className = "weak-score";
         sc.textContent = `${Math.round(acc * 100)} %`;
         const star = mkBtn(v.fav ? ICON.starFilled : ICON.star, v.fav ? "Favorit entfernen" : "Als Favorit markieren", () => {
-          v.fav = !v.fav; save(); renderStats(); renderList();
+          toggleFav(v); renderStats(); renderList();
         });
         star.classList.add("vi-star");
         if (v.fav) star.classList.add("is-fav");
@@ -1950,7 +1944,7 @@
   }
 
   /* ---------- Ansicht wechseln ---------- */
-  const VIEWS = ["listen", "quiz", "write", "cards", "stats", "manage"];
+  const VIEWS = ["home", "listen", "quiz", "write", "cards", "stats", "manage"];
   const PRACTICE = new Set(["quiz", "write", "cards"]);
 
   function switchView(view) {
@@ -1960,7 +1954,6 @@
     if (recognitionOn) stopVoice();
     quizStopListen();
     if (synth) synth.cancel();
-    if (PRACTICE.has(currentView)) tickTime();      // Zeit des verlassenen Übungsmodus verbuchen
 
     currentView = view;
     VIEWS.forEach((v) => { const node = document.getElementById("view-" + v); if (node) node.hidden = v !== view; });
@@ -1971,196 +1964,113 @@
       if (on && t.scrollIntoView) t.scrollIntoView({ inline: "center", block: "nearest" });
     });
 
-    lastActivityTs = PRACTICE.has(view) ? Date.now() : 0;   // Zeitmessung im Übungsmodus starten
-
-    if (view === "quiz") enterQuiz();
+    if (view === "home") updateHome();
+    else if (view === "quiz") enterQuiz();
     else if (view === "write") enterWrite();
     else if (view === "cards") enterCards();
     else if (view === "stats") renderStats();
     else if (view === "listen" && !player.playing && player.pos < 0) setNpState("", "Bereit");
 
     updateWakeLock();
-    try { localStorage.setItem("vt.view", view); } catch (e) {}
   }
 
-  /* ---------- Server / Cloud (optional) ----------
-     Wird nur aktiv, wenn ein Backend unter /api erreichbar ist (Docker-
-     Setup). Als reine Static-Seite (z. B. GitHub Pages) bleibt das Panel
-     ausgeblendet und die App funktioniert unveraendert lokal. */
-  const API_BASE = "/api";
-  let apiAvailable = false;
-  let loadedServerListId = null;   // aktuell aus dem Server geladene/gespeicherte Liste
+  /* ---------- Dashboard / Start (Gamification) ---------- */
+  function xpLevel(xp) { return Math.floor(Math.sqrt((xp || 0) / 50)) + 1; }
 
-  async function apiFetch(path, options) {
-    const res = await fetch(API_BASE + path, {
-      headers: { Accept: "application/json", ...(options && options.body ? { "Content-Type": "application/json" } : {}) },
-      ...options,
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    if (res.status === 204) return null;
-    return res.json();
+  function updateHome() {
+    if (!el.viewHome) return;
+    const p = state.profile;
+    if (el.homeGreeting) el.homeGreeting.textContent = p.name ? `Hallo, ${p.name}!` : "Willkommen!";
+    if (el.homeStreak) el.homeStreak.textContent = String(p.streakCurrent || 0);
+    if (el.homeStreakSub) el.homeStreakSub.textContent = p.streakLongest ? `längste Serie: ${p.streakLongest}` : "";
+    if (el.homeXp) el.homeXp.textContent = String(p.xp || 0);
+    if (el.homeLevel) el.homeLevel.textContent = "Level " + xpLevel(p.xp);
+    if (el.homeDue) el.homeDue.textContent = String(serverStats.dueToday || 0);
+    if (el.homeTotal) el.homeTotal.textContent = String(serverStats.total || state.vocab.length);
+    if (el.homeToday) el.homeToday.textContent = `${serverStats.today ? serverStats.today.correct : 0} richtig · ${serverStats.today ? serverStats.today.wrong : 0} falsch`;
+    renderPhaseChart(el.homePhases);
   }
 
-  // Vokabeln der aktuellen Liste in das vom Backend erwartete Format bringen.
-  function currentPayload(title) {
-    return {
-      title: title || state.title,
-      vocab: state.vocab.map(({ latin, german, forms, done, fav }) => ({ latin, german, forms, done, fav })),
-    };
-  }
-
-  // Eine vom Server geladene Liste in die App uebernehmen (wie Import/Teilen).
-  function applyServerList(data) {
-    if (typeof data.title === "string") state.title = data.title;
-    seqCounter = 0;
-    state.vocab = (data.vocab || []).map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
-    seqCounter = state.vocab.length;
-    applyDeckTitle();
-    save(); renderList(); updateProgress();
-  }
-
-  function updateServerButtons() {
-    if (el.serverUpdateBtn) el.serverUpdateBtn.hidden = !(apiAvailable && loadedServerListId);
-  }
-
-  function renderServerList(lists) {
-    if (!el.serverList) return;
-    el.serverList.innerHTML = "";
-    if (el.serverCount) el.serverCount.textContent = lists.length;
-    if (!lists.length) {
-      const li = document.createElement("li");
-      li.className = "server-empty";
-      li.textContent = "Noch keine Listen auf dem Server.";
-      el.serverList.appendChild(li);
-      return;
-    }
-    lists.forEach((l) => {
-      const li = document.createElement("li");
-      li.className = "server-item" + (l.id === loadedServerListId ? " is-current" : "");
-
-      const meta = document.createElement("div");
-      meta.className = "server-item-meta";
-      const title = document.createElement("span");
-      title.className = "server-item-title";
-      title.textContent = l.title;
-      const sub = document.createElement("span");
-      sub.className = "server-item-sub";
-      sub.textContent = l.count + (l.count === 1 ? " Vokabel" : " Vokabeln");
-      meta.append(title, sub);
-
-      const actions = document.createElement("div");
-      actions.className = "server-item-actions";
-      const loadBtn = document.createElement("button");
-      loadBtn.className = "btn btn-ghost btn-sm";
-      loadBtn.type = "button";
-      loadBtn.textContent = "Laden";
-      loadBtn.addEventListener("click", () => serverLoadList(l.id));
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn btn-ghost btn-sm";
-      delBtn.type = "button";
-      delBtn.textContent = "Löschen";
-      delBtn.addEventListener("click", () => serverDeleteList(l.id, l.title));
-      actions.append(loadBtn, delBtn);
-
-      li.append(meta, actions);
-      el.serverList.appendChild(li);
-    });
-  }
-
-  async function serverRefreshLists() {
-    if (!apiAvailable) return;
-    try {
-      const lists = await apiFetch("/lists");
-      renderServerList(lists);
-    } catch (e) {
-      if (el.serverStatus) el.serverStatus.textContent = "Server nicht erreichbar.";
+  // Balkendiagramm: wie viele Vokabeln aktuell in welcher Leitner-Phase (1–6).
+  function renderPhaseChart(container) {
+    if (!container) return;
+    const phases = serverStats.phases || {};
+    const max = Math.max(1, ...[1, 2, 3, 4, 5, 6].map((p) => phases[p] || 0));
+    container.innerHTML = "";
+    for (let p = 1; p <= 6; p++) {
+      const n = phases[p] || 0;
+      const row = document.createElement("div");
+      row.className = "phase-row";
+      const label = document.createElement("span");
+      label.className = "phase-name";
+      label.textContent = PHASE_LABEL[p] + ` · ${PHASE_DAYS[p]} T`;
+      const wrap = document.createElement("div");
+      wrap.className = "phase-bar-wrap";
+      const bar = document.createElement("div");
+      bar.className = "phase-bar phase-fill-" + p;
+      bar.style.width = (n / max) * 100 + "%";
+      wrap.appendChild(bar);
+      const count = document.createElement("span");
+      count.className = "phase-count";
+      count.textContent = String(n);
+      row.append(label, wrap, count);
+      container.appendChild(row);
     }
   }
 
-  async function serverLoadList(id) {
-    try {
-      const data = await apiFetch("/lists/" + id);
-      const ok = state.vocab.length ? window.confirm("Liste vom Server laden? Deine aktuelle Liste wird ersetzt.") : true;
-      if (!ok) return;
-      applyServerList(data);
-      loadedServerListId = id;
-      updateServerButtons();
-      await serverRefreshLists();
-      toast(`${state.vocab.length} Vokabeln vom Server geladen.`);
-    } catch (e) { toast("Laden vom Server fehlgeschlagen."); }
+  /* ---------- Onboarding (Namensabfrage für neue Nutzer) ---------- */
+  function maybeOnboard() {
+    if (state.profile.onboarded || !el.onboardDialog) return;
+    try { el.onboardDialog.showModal(); el.onboardName.focus(); } catch (e) {}
+  }
+  async function submitOnboard(e) {
+    e.preventDefault();
+    const name = (el.onboardName.value || "").trim();
+    if (!name) return;
+    try { applyProfile(await apiFetch("/profile", { method: "PUT", body: JSON.stringify({ name }) })); } catch (err) {}
+    try { el.onboardDialog.close(); } catch (e) {}
+    updateHome();
+    toast(`Willkommen, ${state.profile.name}!`);
   }
 
-  async function serverSaveCurrent() {
-    if (!state.vocab.length) { toast("Keine Vokabeln zum Speichern."); return; }
-    const title = window.prompt("Liste auf dem Server speichern als:", state.title);
-    if (title === null) return;
+  /* ---------- Geteilte Liste aus dem Link importieren ---------- */
+  async function checkSharedDeck() {
+    const m = location.hash.match(/deck=([^&]+)/);
+    if (!m) return;
     try {
-      const saved = await apiFetch("/lists", { method: "POST", body: JSON.stringify(currentPayload(title.trim())) });
-      loadedServerListId = saved.id;
-      updateServerButtons();
-      await serverRefreshLists();
-      toast("Auf Server gespeichert.");
-    } catch (e) { toast("Speichern auf Server fehlgeschlagen."); }
-  }
-
-  async function serverUpdateLoaded() {
-    if (!loadedServerListId) return;
-    try {
-      await apiFetch("/lists/" + loadedServerListId, { method: "PUT", body: JSON.stringify(currentPayload(state.title)) });
-      await serverRefreshLists();
-      toast("Liste auf dem Server aktualisiert.");
-    } catch (e) { toast("Aktualisieren fehlgeschlagen."); }
-  }
-
-  async function serverDeleteList(id, title) {
-    if (!window.confirm(`Liste „${title}" auf dem Server löschen?`)) return;
-    try {
-      await apiFetch("/lists/" + id, { method: "DELETE" });
-      if (loadedServerListId === id) { loadedServerListId = null; updateServerButtons(); }
-      await serverRefreshLists();
-      toast("Liste gelöscht.");
-    } catch (e) { toast("Löschen fehlgeschlagen."); }
-  }
-
-  // Beim Start pruefen, ob ein Backend da ist; nur dann das Panel zeigen.
-  async function initServerPanel() {
-    if (!el.serverCard) return;
-    try {
-      const health = await apiFetch("/health");
-      apiAvailable = true;
-      el.serverCard.hidden = false;
-      if (el.serverStatus && health && health.db === false) {
-        el.serverStatus.textContent = "Server startet … einen Moment.";
+      const data = JSON.parse(b64decode(decodeURIComponent(m[1])));
+      const arr = (data.v || []).map(([latin, german, forms]) => ({ latin, german, forms }));
+      if (arr.length && window.confirm(`Geteilte Liste mit ${arr.length} Vokabeln importieren?`)) {
+        await apiFetch("/import", { method: "POST", body: JSON.stringify({ groupName: data.t || "Geteilte Liste", vocab: arr }) });
+        await reloadAll();
+        toast(`${arr.length} Vokabeln importiert.`);
       }
-      await serverRefreshLists();
-      updateServerButtons();
-    } catch (e) {
-      apiAvailable = false;
-      el.serverCard.hidden = true;   // reine Static-Variante
-    }
+    } catch (e) { /* ungültiger Link */ }
+    history.replaceState(null, "", location.pathname + location.search);
   }
 
   /* ---------- Init ---------- */
-  function init() {
+  async function init() {
     if (!("speechSynthesis" in window)) toast("Dein Browser unterstützt keine Sprachausgabe.");
-    load();
-    checkSharedDeck();
-    // seqCounter hinter den höchsten geladenen Wert setzen
-    seqCounter = state.vocab.reduce((m, v) => Math.max(m, (v.seq ?? 0) + 1), 0);
-    updatePlayButton();
-    applySettingsToUI();
-    applyDeckTitle();
     bindEvents();
     setupMediaSession();
+    updatePlayButton();
+    try {
+      await bootstrap();
+    } catch (e) {
+      toast("Server nicht erreichbar – läuft das Backend?");
+    }
+    applySettingsToUI();           // u. a. Theme aus den Server-Einstellungen
+    applyDeckTitle();
     loadVoices();
+    populateGroupControls();
     renderList();
     updateProgress();
-    initServerPanel();   // Server-Panel zeigen, falls ein Backend erreichbar ist
-    // Ohne Vokabeln direkt in den Vokabeln-Tab, sonst zuletzt genutzten Tab
-    let lastView = "listen";
-    try { lastView = localStorage.getItem("vt.view") || "listen"; } catch (e) {}
-    if (!state.vocab.length) lastView = "manage";
-    if (VIEWS.includes(lastView) && lastView !== "listen") switchView(lastView);
+    updateHome();
+    await checkSharedDeck();
+    // Landing: Start (Dashboard) für eingerichtete Nutzer, sonst Vokabeln-Tab
+    if (state.vocab.length) switchView("home"); else switchView("manage");
+    maybeOnboard();
   }
 
   document.addEventListener("DOMContentLoaded", init);
