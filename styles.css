@@ -233,6 +233,21 @@ kbd {
 .btn-soft { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
 .btn-soft:hover { background: var(--accent-hover); border-color: transparent; color: #fff; }
 .btn-ghost { background: var(--surface-2); border-color: var(--border-strong); }
+.btn-sm { padding: 5px 11px; font-size: .8rem; }
+
+/* Server-Vokabeln (optionales Backend) */
+.server-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; }
+.server-item {
+  display: flex; align-items: center; gap: 14px; padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.server-item:last-child { border-bottom: none; }
+.server-item.is-current { background: var(--accent-soft); border-radius: var(--radius-sm); padding-left: 12px; padding-right: 12px; border-bottom-color: transparent; }
+.server-item-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.server-item-title { font-family: var(--serif); font-weight: 500; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-item-sub { color: var(--text-faint); font-size: .8rem; }
+.server-item-actions { display: flex; gap: 6px; flex: none; }
+.server-empty { color: var(--text-faint); font-size: .88rem; padding: 10px 4px; }
 
 .vocab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .vocab-item {

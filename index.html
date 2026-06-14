@@ -149,6 +149,22 @@
         oder importiere eine JSON-Datei.
       </p>
     </section>
+
+    <!-- Server-Vokabeln (nur sichtbar, wenn ein Backend erreichbar ist) -->
+    <section id="serverCard" class="card list-card" aria-label="Server-Vokabeln" hidden>
+      <div class="list-head">
+        <h2>Server-Vokabeln <span class="count-pill" id="serverCount">0</span></h2>
+        <div class="list-head-tools">
+          <button id="serverRefreshBtn" class="btn btn-ghost btn-sm" type="button">Aktualisieren</button>
+        </div>
+      </div>
+      <p class="hint" id="serverStatus">Auf dem Server (Datenbank) gespeicherte Vokabellisten – geräteübergreifend und dauerhaft.</p>
+      <ul class="server-list" id="serverList"></ul>
+      <div class="list-toolbar">
+        <button id="serverSaveBtn" class="btn btn-soft" type="button">Aktuelle Liste auf Server speichern</button>
+        <button id="serverUpdateBtn" class="btn btn-ghost" type="button" hidden>Geladene Liste aktualisieren</button>
+      </div>
+    </section>
     </div><!-- /view-manage -->
 
     <div id="view-quiz" class="view" hidden>

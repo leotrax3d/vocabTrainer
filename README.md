@@ -5,8 +5,10 @@ vorgelesen: **erst die lateinische Form, dann eine Pause, dann die deutsche
 Übersetzung**. So kannst du mitlernen, ohne auf den Bildschirm schauen zu
 müssen (z. B. unterwegs).
 
-Die App läuft komplett im Browser. Es gibt keinen Server, keine Anmeldung,
-keine Tracking. Deine Vokabeln werden lokal im Browser gespeichert.
+Die App läuft standardmäßig komplett im Browser – ohne Server, ohne Anmeldung,
+ohne Tracking; deine Vokabeln werden lokal im Browser gespeichert. Optional
+gibt es ein **Docker-Setup** mit Backend und Vokabeldatenbank, um Listen
+geräteübergreifend auf einem Server zu speichern (siehe [`DOCKER.md`](DOCKER.md)).
 
 ## Funktionen
 
@@ -169,6 +171,23 @@ Wer einen lokalen Server bevorzugt:
 python3 -m http.server 8000
 # dann http://localhost:8000 öffnen
 ```
+
+## Mit Docker (Server-Variante)
+
+Für ein Deployment mit echtem Backend und einer persistenten
+Vokabeldatenbank liegt ein **Docker-Compose-Setup** bei (Frontend per nginx,
+Node/Express-Backend, PostgreSQL):
+
+```bash
+docker compose up -d --build
+# dann http://localhost:6767 öffnen
+```
+
+Das Web-Dashboard ist nach außen über **Port 6767** erreichbar; das Backend
+spricht intern mit der Datenbank, die Vokabeln liegen in einem persistenten
+Docker-Volume. Im Tab **Vokabeln** erscheint dann der Bereich
+„Server-Vokabeln" zum Speichern/Laden von Listen auf dem Server. Alle Details
+und Befehle stehen in [`DOCKER.md`](DOCKER.md).
 
 ## Auf GitHub Pages veröffentlichen
 

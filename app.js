@@ -151,6 +151,10 @@
     cFavToggle: $("cFavToggle"), cScore: $("cScore"), cEmptyState: $("cEmptyState"),
     // Statistik
     statsContent: $("statsContent"), statsResetBtn: $("statsResetBtn"),
+    // Server / Cloud (optional, nur mit Backend)
+    serverCard: $("serverCard"), serverList: $("serverList"), serverCount: $("serverCount"),
+    serverStatus: $("serverStatus"), serverRefreshBtn: $("serverRefreshBtn"),
+    serverSaveBtn: $("serverSaveBtn"), serverUpdateBtn: $("serverUpdateBtn"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -1125,6 +1129,10 @@
     el.sampleBtn.addEventListener("click", loadSample);
     el.emptySample.addEventListener("click", loadSample);
 
+    if (el.serverRefreshBtn) el.serverRefreshBtn.addEventListener("click", serverRefreshLists);
+    if (el.serverSaveBtn) el.serverSaveBtn.addEventListener("click", serverSaveCurrent);
+    if (el.serverUpdateBtn) el.serverUpdateBtn.addEventListener("click", serverUpdateLoaded);
+
     el.voiceToggle.addEventListener("change", () => { el.voiceToggle.checked ? startVoice() : stopVoice(); });
 
     el.editForm.addEventListener("submit", submitEdit);
@@ -1975,6 +1983,163 @@
     try { localStorage.setItem("vt.view", view); } catch (e) {}
   }
 
+  /* ---------- Server / Cloud (optional) ----------
+     Wird nur aktiv, wenn ein Backend unter /api erreichbar ist (Docker-
+     Setup). Als reine Static-Seite (z. B. GitHub Pages) bleibt das Panel
+     ausgeblendet und die App funktioniert unveraendert lokal. */
+  const API_BASE = "/api";
+  let apiAvailable = false;
+  let loadedServerListId = null;   // aktuell aus dem Server geladene/gespeicherte Liste
+
+  async function apiFetch(path, options) {
+    const res = await fetch(API_BASE + path, {
+      headers: { Accept: "application/json", ...(options && options.body ? { "Content-Type": "application/json" } : {}) },
+      ...options,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  // Vokabeln der aktuellen Liste in das vom Backend erwartete Format bringen.
+  function currentPayload(title) {
+    return {
+      title: title || state.title,
+      vocab: state.vocab.map(({ latin, german, forms, done, fav }) => ({ latin, german, forms, done, fav })),
+    };
+  }
+
+  // Eine vom Server geladene Liste in die App uebernehmen (wie Import/Teilen).
+  function applyServerList(data) {
+    if (typeof data.title === "string") state.title = data.title;
+    seqCounter = 0;
+    state.vocab = (data.vocab || []).map((v, i) => normalize({ ...v, seq: i })).filter((v) => v.latin && v.german);
+    seqCounter = state.vocab.length;
+    applyDeckTitle();
+    save(); renderList(); updateProgress();
+  }
+
+  function updateServerButtons() {
+    if (el.serverUpdateBtn) el.serverUpdateBtn.hidden = !(apiAvailable && loadedServerListId);
+  }
+
+  function renderServerList(lists) {
+    if (!el.serverList) return;
+    el.serverList.innerHTML = "";
+    if (el.serverCount) el.serverCount.textContent = lists.length;
+    if (!lists.length) {
+      const li = document.createElement("li");
+      li.className = "server-empty";
+      li.textContent = "Noch keine Listen auf dem Server.";
+      el.serverList.appendChild(li);
+      return;
+    }
+    lists.forEach((l) => {
+      const li = document.createElement("li");
+      li.className = "server-item" + (l.id === loadedServerListId ? " is-current" : "");
+
+      const meta = document.createElement("div");
+      meta.className = "server-item-meta";
+      const title = document.createElement("span");
+      title.className = "server-item-title";
+      title.textContent = l.title;
+      const sub = document.createElement("span");
+      sub.className = "server-item-sub";
+      sub.textContent = l.count + (l.count === 1 ? " Vokabel" : " Vokabeln");
+      meta.append(title, sub);
+
+      const actions = document.createElement("div");
+      actions.className = "server-item-actions";
+      const loadBtn = document.createElement("button");
+      loadBtn.className = "btn btn-ghost btn-sm";
+      loadBtn.type = "button";
+      loadBtn.textContent = "Laden";
+      loadBtn.addEventListener("click", () => serverLoadList(l.id));
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn btn-ghost btn-sm";
+      delBtn.type = "button";
+      delBtn.textContent = "Löschen";
+      delBtn.addEventListener("click", () => serverDeleteList(l.id, l.title));
+      actions.append(loadBtn, delBtn);
+
+      li.append(meta, actions);
+      el.serverList.appendChild(li);
+    });
+  }
+
+  async function serverRefreshLists() {
+    if (!apiAvailable) return;
+    try {
+      const lists = await apiFetch("/lists");
+      renderServerList(lists);
+    } catch (e) {
+      if (el.serverStatus) el.serverStatus.textContent = "Server nicht erreichbar.";
+    }
+  }
+
+  async function serverLoadList(id) {
+    try {
+      const data = await apiFetch("/lists/" + id);
+      const ok = state.vocab.length ? window.confirm("Liste vom Server laden? Deine aktuelle Liste wird ersetzt.") : true;
+      if (!ok) return;
+      applyServerList(data);
+      loadedServerListId = id;
+      updateServerButtons();
+      await serverRefreshLists();
+      toast(`${state.vocab.length} Vokabeln vom Server geladen.`);
+    } catch (e) { toast("Laden vom Server fehlgeschlagen."); }
+  }
+
+  async function serverSaveCurrent() {
+    if (!state.vocab.length) { toast("Keine Vokabeln zum Speichern."); return; }
+    const title = window.prompt("Liste auf dem Server speichern als:", state.title);
+    if (title === null) return;
+    try {
+      const saved = await apiFetch("/lists", { method: "POST", body: JSON.stringify(currentPayload(title.trim())) });
+      loadedServerListId = saved.id;
+      updateServerButtons();
+      await serverRefreshLists();
+      toast("Auf Server gespeichert.");
+    } catch (e) { toast("Speichern auf Server fehlgeschlagen."); }
+  }
+
+  async function serverUpdateLoaded() {
+    if (!loadedServerListId) return;
+    try {
+      await apiFetch("/lists/" + loadedServerListId, { method: "PUT", body: JSON.stringify(currentPayload(state.title)) });
+      await serverRefreshLists();
+      toast("Liste auf dem Server aktualisiert.");
+    } catch (e) { toast("Aktualisieren fehlgeschlagen."); }
+  }
+
+  async function serverDeleteList(id, title) {
+    if (!window.confirm(`Liste „${title}" auf dem Server löschen?`)) return;
+    try {
+      await apiFetch("/lists/" + id, { method: "DELETE" });
+      if (loadedServerListId === id) { loadedServerListId = null; updateServerButtons(); }
+      await serverRefreshLists();
+      toast("Liste gelöscht.");
+    } catch (e) { toast("Löschen fehlgeschlagen."); }
+  }
+
+  // Beim Start pruefen, ob ein Backend da ist; nur dann das Panel zeigen.
+  async function initServerPanel() {
+    if (!el.serverCard) return;
+    try {
+      const health = await apiFetch("/health");
+      apiAvailable = true;
+      el.serverCard.hidden = false;
+      if (el.serverStatus && health && health.db === false) {
+        el.serverStatus.textContent = "Server startet … einen Moment.";
+      }
+      await serverRefreshLists();
+      updateServerButtons();
+    } catch (e) {
+      apiAvailable = false;
+      el.serverCard.hidden = true;   // reine Static-Variante
+    }
+  }
+
   /* ---------- Init ---------- */
   function init() {
     if (!("speechSynthesis" in window)) toast("Dein Browser unterstützt keine Sprachausgabe.");
@@ -1990,6 +2155,7 @@
     loadVoices();
     renderList();
     updateProgress();
+    initServerPanel();   // Server-Panel zeigen, falls ein Backend erreichbar ist
     // Ohne Vokabeln direkt in den Vokabeln-Tab, sonst zuletzt genutzten Tab
     let lastView = "listen";
     try { lastView = localStorage.getItem("vt.view") || "listen"; } catch (e) {}
