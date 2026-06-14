@@ -235,19 +235,40 @@ kbd {
 .btn-ghost { background: var(--surface-2); border-color: var(--border-strong); }
 .btn-sm { padding: 5px 11px; font-size: .8rem; }
 
-/* Server-Vokabeln (optionales Backend) */
-.server-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; }
-.server-item {
-  display: flex; align-items: center; gap: 14px; padding: 12px 4px;
-  border-bottom: 1px solid var(--border);
-}
-.server-item:last-child { border-bottom: none; }
-.server-item.is-current { background: var(--accent-soft); border-radius: var(--radius-sm); padding-left: 12px; padding-right: 12px; border-bottom-color: transparent; }
-.server-item-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.server-item-title { font-family: var(--serif); font-weight: 500; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.server-item-sub { color: var(--text-faint); font-size: .8rem; }
-.server-item-actions { display: flex; gap: 6px; flex: none; }
-.server-empty { color: var(--text-faint); font-size: .88rem; padding: 10px 4px; }
+/* ---------- Start / Dashboard ---------- */
+.home-hero { text-align: center; }
+.home-hello { font-family: var(--serif); font-size: 1.7rem; font-weight: 600; margin: 0; }
+.home-sub { color: var(--text-soft); margin: 6px 0 18px; }
+.home-cta { font-size: 1rem; padding: 12px 22px; }
+.home-today { color: var(--text-faint); font-size: .85rem; margin: 14px 0 0; }
+
+.home-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 22px 0; }
+.home-tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 14px; text-align: center; }
+.home-tile-num { font-family: var(--serif); font-size: 1.9rem; font-weight: 600; line-height: 1; }
+.home-tile-label { font-size: .82rem; color: var(--text-soft); margin-top: 6px; }
+.home-tile-sub { font-size: .74rem; color: var(--text-faint); margin-top: 2px; min-height: 1em; }
+
+/* Phasen-Diagramm (Leitner 1–6) */
+.phase-chart { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
+.phase-row { display: grid; grid-template-columns: 132px 1fr 30px; align-items: center; gap: 10px; }
+.phase-name { font-size: .8rem; color: var(--text-soft); }
+.phase-bar-wrap { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; height: 13px; overflow: hidden; }
+.phase-bar { height: 100%; border-radius: 999px; min-width: 2px; transition: width .35s ease; }
+.phase-count { font-size: .8rem; font-weight: 600; text-align: right; color: var(--text-soft); }
+.phase-fill-1 { background: #e2685c; }
+.phase-fill-2 { background: #e89b5b; }
+.phase-fill-3 { background: #e8c45c; }
+.phase-fill-4 { background: #9bc06a; }
+.phase-fill-5 { background: #5fae6e; }
+.phase-fill-6 { background: #3f8f5a; }
+
+/* Gruppe + Phase in der Vokabelliste */
+.vi-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center; }
+.vi-group { font-size: .7rem; background: var(--accent-soft); color: var(--accent-hover); padding: 2px 8px; border-radius: 999px; }
+.vi-phase { font-size: .7rem; color: var(--text-faint); border: 1px solid var(--border-strong); padding: 2px 8px; border-radius: 999px; }
+.vi-due { font-size: .7rem; background: #e2685c; color: #fff; padding: 2px 8px; border-radius: 999px; }
+
+.dlg-text { color: var(--text-soft); margin: 0 0 14px; font-size: .9rem; }
 
 .vocab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .vocab-item {
@@ -478,6 +499,10 @@ kbd {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .stat-num { font-size: 1.5rem; }
   .search { max-width: 100px; }
+  .phase-row { grid-template-columns: 96px 1fr 26px; gap: 8px; }
+  .phase-name { font-size: .72rem; }
+  .home-tile-num { font-size: 1.5rem; }
+  .home-hello { font-size: 1.4rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
