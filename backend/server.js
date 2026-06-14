@@ -66,6 +66,21 @@ CREATE TABLE IF NOT EXISTS vocab (
   wrong       INTEGER NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Migration: bestehende Datenbank aus einer früheren Version (PR #17 mit
+-- Tabellen lists/vocab ohne group_id/phase/next_review) verträglich machen.
+-- Auf einer frischen DB sind alle folgenden Anweisungen No-Ops.
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS group_id    INTEGER REFERENCES groups(id) ON DELETE SET NULL;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS phase       INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS next_review DATE    NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS seen        INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS correct     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS wrong       INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE vocab ADD COLUMN IF NOT EXISTS created_at  TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE vocab DROP COLUMN IF EXISTS list_id;
+ALTER TABLE vocab DROP COLUMN IF EXISTS position;
+DROP TABLE IF EXISTS lists;
+
 CREATE INDEX IF NOT EXISTS idx_vocab_group ON vocab(group_id);
 CREATE INDEX IF NOT EXISTS idx_vocab_due ON vocab(next_review);
 

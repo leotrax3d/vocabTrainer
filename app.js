@@ -78,14 +78,19 @@
                  correctCount: 0, completedCount: 0, finished: false, justAnswered: false, typing: false };
   let quizReco = null;
   let quizArmed = false;   // Mikrofon mind. einmal gestartet (Berechtigung erteilt)
-  let currentView = "listen";
+  let currentView = "home";
+  let practiceMode = "listen";   // aktives Untermodul im Tab „Übungen" (listen|quiz|write)
+  let practiceScope = null;      // {groupId, favOnly, label} für gezielte Tests, sonst null (Tages-Pool)
   let wakeLock = null;     // Screen Wake Lock (Bildschirm anlassen)
+
+  // Effektiver Modus: „Übungen" bündelt listen/quiz/write, Karten ist eigenständig.
+  const activeMode = () => currentView === "practice" ? practiceMode : currentView;
 
   // Schreiben-Modus
   const write = { order: [], pos: -1, answered: false, correctCount: 0, completedCount: 0, finished: false };
   // Karten-Modus
-  const cards = { order: [], pos: -1, flipped: false };
-  let cardSwiped = false, cardTouchX = 0, cardTouchY = 0;
+  const cards = { queue: [], pos: 0, total: 0, flipped: false };
+  let cardDrag = null;     // aktiver Swipe-Zustand der Karteikarte
 
   const player = { playing: false, order: [], pos: -1, currentId: null, cancel: false, timer: null };
 
@@ -162,6 +167,12 @@
     onboardDialog: $("onboardDialog"), onboardForm: $("onboardForm"), onboardName: $("onboardName"),
     // Gruppen (Bearbeiten-Dialog & Liste)
     fGroup: $("fGroup"), fNewGroup: $("fNewGroup"), groupFilter: $("groupFilter"),
+    // Übungen (Untermodi) & Tests
+    scopeBar: $("scopeBar"), scopeLabel: $("scopeLabel"), scopeExit: $("scopeExit"),
+    testGroup: $("testGroup"), testFavOnly: $("testFavOnly"), testCount: $("testCount"),
+    // Karten: Phase, Fortschritt, Zurück, Swipe-Hinweise
+    cPhaseBadge: $("cPhaseBadge"), cProgressBar: $("cProgressBar"), cBackBtn: $("cBackBtn"),
+    swipeHintLeft: $("swipeHintLeft"), swipeHintRight: $("swipeHintRight"),
   };
 
   /* ---------- Beispiel-Daten ---------- */
@@ -459,7 +470,7 @@
   /* ---------- Wake Lock (Bildschirm anlassen) ---------- */
   async function updateWakeLock() {
     const want = state.settings.qWake && ("wakeLock" in navigator) &&
-                 (player.playing || currentView === "quiz");
+                 (player.playing || activeMode() === "quiz");
     try {
       if (want && !wakeLock) {
         wakeLock = await navigator.wakeLock.request("screen");
@@ -601,16 +612,31 @@
      Bewusst schlicht: einfaches Durchhören in Listenreihenfolge.
      Kein Spaced-Repetition-Umsortieren – das gibt es nur in den
      Übungsmodi (Sprechen/Schreiben/Karten). */
+  const shuffleInPlace = (idx) => {
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    return idx;
+  };
+
+  // Index-Auswahl für einen gezielten Test (Tab „Tests"): alle Vokabeln einer
+  // Gruppe (oder alle) – unabhängig vom Wiederholungsplan.
+  function scopedIndices() {
+    let idx = state.vocab.map((_, i) => i);
+    if (practiceScope.groupId && practiceScope.groupId !== "all") {
+      idx = idx.filter((i) => String(state.vocab[i].groupId) === String(practiceScope.groupId));
+    }
+    if (practiceScope.favOnly) idx = idx.filter((i) => state.vocab[i].fav);
+    return idx;
+  }
+
   function buildOrder() {
+    if (practiceScope) { player.order = shuffleInPlace(scopedIndices()); return; }
     let idx = state.vocab.map((_, i) => i);
     if (state.settings.skipDone) idx = idx.filter((i) => !state.vocab[i].done);
     if (state.settings.favOnly) idx = idx.filter((i) => state.vocab[i].fav);
-    if (state.settings.shuffle) {
-      for (let i = idx.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [idx[i], idx[j]] = [idx[j], idx[i]];
-      }
-    }
+    if (state.settings.shuffle) shuffleInPlace(idx);
     player.order = idx;
   }
 
@@ -621,6 +647,7 @@
   // gemischt – quer über alle Phasen. Sind keine fällig, wird der gesamte
   // Bestand geübt, damit die Modi nie leer laufen.
   function buildPracticeOrder({ skipDone, favOnly }) {
+    if (practiceScope) return shuffleInPlace(scopedIndices());   // gezielter Test
     const pick = (onlyDue) => {
       let idx = state.vocab.map((_, i) => i);
       if (onlyDue) idx = idx.filter((i) => state.vocab[i].due);
@@ -630,11 +657,7 @@
     };
     let idx = pick(true);
     if (!idx.length) idx = pick(false);
-    for (let i = idx.length - 1; i > 0; i--) {        // Tages-Mix: immer mischen
-      const j = Math.floor(Math.random() * (i + 1));
-      [idx[i], idx[j]] = [idx[j], idx[i]];
-    }
-    return idx;
+    return shuffleInPlace(idx);                                  // Tages-Mix: immer mischen
   }
 
   /* ---------- Wiedergabe-Schleife ---------- */
@@ -1092,7 +1115,7 @@
     el.wSkipDoneToggle.checked = s.wSkipDone;
     if (el.wFavToggle) el.wFavToggle.checked = s.wFavOnly;
     el.cDirToggle.checked = s.cDir;
-    el.cShuffleToggle.checked = s.cShuffle;
+    if (el.cShuffleToggle) el.cShuffleToggle.checked = s.cShuffle;
     el.cSkipDoneToggle.checked = s.cSkipDone;
     if (el.cFavToggle) el.cFavToggle.checked = s.cFavOnly;
     applyTheme(s.theme);
@@ -1112,8 +1135,6 @@
     el.qHearLatin.innerHTML = ICON.speaker;
     el.wHear.innerHTML = ICON.speaker;
     el.cHearFront.innerHTML = ICON.speaker;
-    el.cPrevBtn.innerHTML = ICON.prev;
-    el.cNextBtn.innerHTML = ICON.next;
 
     el.playBtn.addEventListener("click", togglePlay);
     el.prevBtn.addEventListener("click", () => jump(-1));
@@ -1167,7 +1188,8 @@
     el.emptySample.addEventListener("click", loadSample);
 
     if (el.onboardForm) el.onboardForm.addEventListener("submit", submitOnboard);
-    if (el.homeStartBtn) el.homeStartBtn.addEventListener("click", () => switchView("quiz"));
+    // Start-CTA -> direkt in die Karteikarten-Abfrage (Tages-Pool)
+    if (el.homeStartBtn) el.homeStartBtn.addEventListener("click", () => { practiceScope = null; switchView("cards"); });
 
     el.voiceToggle.addEventListener("change", () => { el.voiceToggle.checked ? startVoice() : stopVoice(); });
 
@@ -1180,28 +1202,49 @@
       if (el.dialog.open) return;
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea") return;
-      if (currentView === "quiz") {
+      if (currentView === "cards") {
+        // Karten: Leertaste umdrehen, ← noch üben, → gewusst
+        if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flipCard(); }
+        else if (e.code === "ArrowLeft") { e.preventDefault(); swipeGrade(false); }
+        else if (e.code === "ArrowRight") { e.preventDefault(); swipeGrade(true); }
+        return;
+      }
+      const mode = activeMode();
+      if (mode === "quiz") {
         if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); quiz.listening ? quizStopListen() : quizListen(); }
         else if (e.code === "ArrowRight") { e.preventDefault(); quizNext(true); }
         else if (e.key && e.key.toLowerCase() === "l") { e.preventDefault(); quizReveal(); }
         return;
       }
-      if (currentView === "cards") {
-        if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flipCard(); }
-        else if (e.code === "ArrowLeft") { e.preventDefault(); cardsPrev(); }
-        else if (e.code === "ArrowRight") { e.preventDefault(); cardsNext(); }
-        else if (e.key && e.key.toLowerCase() === "k") { e.preventDefault(); cardsMark(true); }
-        else if (e.key && e.key.toLowerCase() === "j") { e.preventDefault(); cardsMark(false); }
-        return;
+      if (mode === "write") return; // Tastatur über das Eingabefeld/Formular
+      if (mode === "listen") {
+        if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+        else if (e.code === "ArrowRight") { e.preventDefault(); jump(1); }
+        else if (e.code === "ArrowLeft") { e.preventDefault(); jump(-1); }
       }
-      if (currentView === "write") return; // Tastatur über das Eingabefeld/Formular
-      if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-      else if (e.code === "ArrowRight") { e.preventDefault(); jump(1); }
-      else if (e.code === "ArrowLeft") { e.preventDefault(); jump(-1); }
     });
 
-    // Tabs
-    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
+    // Tabs (Übungen-Tab setzt einen evtl. aktiven Test zurück)
+    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+      const v = t.dataset.view;
+      if (v === "practice") {
+        practiceScope = null;
+        if (currentView === "practice") { updateScopeBar(); setPracticeMode(practiceMode); return; }
+      }
+      switchView(v);
+    }));
+
+    // Untermodi-Umschalter (Hören / Sprechen / Schreiben)
+    document.querySelectorAll(".seg").forEach((s) => s.addEventListener("click", () => setPracticeMode(s.dataset.mode)));
+    if (el.scopeExit) el.scopeExit.addEventListener("click", () => { practiceScope = null; updateScopeBar(); setPracticeMode(practiceMode); toast("Test beendet."); });
+
+    // Tests
+    if (el.testGroup) el.testGroup.addEventListener("change", updateTestCount);
+    if (el.testFavOnly) el.testFavOnly.addEventListener("change", updateTestCount);
+    document.querySelectorAll(".test-cats [data-cat]").forEach((b) => b.addEventListener("click", () => startTest(b.dataset.cat)));
+
+    // Karten: Zurück zum Start
+    if (el.cBackBtn) el.cBackBtn.addEventListener("click", () => switchView("home"));
 
     // Quiz-Steuerung
     el.qMicBtn.addEventListener("click", () => { quiz.listening ? quizStopListen() : quizListen(); });
@@ -1213,12 +1256,12 @@
     el.qTypeInput.addEventListener("blur", () => { quiz.typing = false; });
     const qToggle = (chk, key, rebuild) => chk.addEventListener("change", () => {
       state.settings[key] = chk.checked; save();
-      if (rebuild && currentView === "quiz") { const keepPos = quiz.pos; buildQuizOrder(); quiz.pos = Math.min(keepPos, quiz.order.length - 1); updateQuizProgress(); }
+      if (rebuild && activeMode() === "quiz") { const keepPos = quiz.pos; buildQuizOrder(); quiz.pos = Math.min(keepPos, quiz.order.length - 1); updateQuizProgress(); }
     });
     qToggle(el.qShuffleToggle, "qShuffle", true);
     qToggle(el.qAutoToggle, "qAuto", false);
     qToggle(el.qSkipDoneToggle, "qSkipDone", true);
-    if (el.qFavToggle) el.qFavToggle.addEventListener("change", () => { state.settings.qFavOnly = el.qFavToggle.checked; save(); if (currentView === "quiz") enterQuiz(); });
+    if (el.qFavToggle) el.qFavToggle.addEventListener("change", () => { state.settings.qFavOnly = el.qFavToggle.checked; save(); if (activeMode() === "quiz") enterQuiz(); });
     el.qWakeToggle.addEventListener("change", () => { state.settings.qWake = el.qWakeToggle.checked; save(); updateWakeLock(); });
 
     // Schreiben-Steuerung
@@ -1226,27 +1269,19 @@
     el.wSolveBtn.addEventListener("click", writeReveal);
     el.wNextBtn.addEventListener("click", writeNext);
     el.wHear.addEventListener("click", writeHear);
-    const wToggle = (chk, key) => chk.addEventListener("change", () => { state.settings[key] = chk.checked; save(); if (currentView === "write") enterWrite(); });
+    const wToggle = (chk, key) => chk.addEventListener("change", () => { state.settings[key] = chk.checked; save(); if (activeMode() === "write") enterWrite(); });
     wToggle(el.wDirToggle, "wDir");
     wToggle(el.wShuffleToggle, "wShuffle");
     wToggle(el.wSkipDoneToggle, "wSkipDone");
     if (el.wFavToggle) wToggle(el.wFavToggle, "wFavOnly");
 
-    // Karten-Steuerung
-    el.flashcard.addEventListener("click", () => { if (cardSwiped) { cardSwiped = false; return; } flipCard(); });
-    el.flashcard.addEventListener("touchstart", (e) => { const t = e.changedTouches[0]; cardTouchX = t.clientX; cardTouchY = t.clientY; cardSwiped = false; }, { passive: true });
-    el.flashcard.addEventListener("touchend", (e) => {
-      const t = e.changedTouches[0]; const dx = t.clientX - cardTouchX, dy = t.clientY - cardTouchY;
-      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { cardSwiped = true; if (dx < 0) cardsNext(); else cardsPrev(); }
-    }, { passive: true });
+    // Karten-Steuerung: Drag/Swipe (Touch + Maus via Pointer Events)
+    bindFlashcardGestures();
     el.cHearFront.addEventListener("click", cardsHearFront);
-    el.cPrevBtn.addEventListener("click", cardsPrev);
-    el.cNextBtn.addEventListener("click", cardsNext);
-    el.cKnownBtn.addEventListener("click", () => cardsMark(true));
-    el.cUnknownBtn.addEventListener("click", () => cardsMark(false));
+    el.cKnownBtn.addEventListener("click", () => swipeGrade(true));
+    el.cUnknownBtn.addEventListener("click", () => swipeGrade(false));
     const cToggle = (chk, key) => chk.addEventListener("change", () => { state.settings[key] = chk.checked; save(); if (currentView === "cards") enterCards(); });
     cToggle(el.cDirToggle, "cDir");
-    cToggle(el.cShuffleToggle, "cShuffle");
     cToggle(el.cSkipDoneToggle, "cSkipDone");
     if (el.cFavToggle) cToggle(el.cFavToggle, "cFavOnly");
 
@@ -1512,9 +1547,9 @@
     quiz.listening = false;
     el.qMicBtn.classList.remove("is-listening");
     // Hände-frei: bei Stille erneut zuhören, solange im Quiz und unbeantwortet
-    if (currentView === "quiz" && state.settings.qAuto && quizArmed && !quiz.revealed && !quiz.finished && !quiz.justAnswered && !quiz.typing) {
+    if (activeMode() === "quiz" && state.settings.qAuto && quizArmed && !quiz.revealed && !quiz.finished && !quiz.justAnswered && !quiz.typing) {
       setTimeout(() => {
-        if (currentView === "quiz" && !quiz.listening && !quiz.revealed && !quiz.finished && !quiz.typing) quizListen();
+        if (activeMode() === "quiz" && !quiz.listening && !quiz.revealed && !quiz.finished && !quiz.typing) quizListen();
       }, 250);
     }
   }
@@ -1565,7 +1600,7 @@
     setQStatus("Lösung wird vorgelesen …", "is-wrong");
     failTone();
     await speak(v.german, state.settings.germanVoiceURI, "de-DE");
-    if (currentView === "quiz" && state.settings.qAuto && quizArmed) setTimeout(() => quizNext(true), 700);
+    if (activeMode() === "quiz" && state.settings.qAuto && quizArmed) setTimeout(() => quizNext(true), 700);
   }
 
   function quizHearLatin() {
@@ -1617,7 +1652,7 @@
     el.wCheckBtn.textContent = "Prüfen";
     setWStatus("Tippe die Übersetzung und drücke Enter.", "");
     updateWriteProgress();
-    if (currentView === "write") el.wInput.focus();
+    if (activeMode() === "write") el.wInput.focus();
   }
 
   function writeNext() {
@@ -1693,21 +1728,28 @@
   /* ============================================================
      KARTEN-MODUS (Flashcards)
      ============================================================ */
-  const currentCardVocab = () => state.vocab[cards.order[cards.pos]];
+  // Aktuelle Karte über die ID (robust, falls die Liste zwischendurch umsortiert wird).
+  const currentCardVocab = () => state.vocab.find((v) => v.id === cards.queue[cards.pos]);
 
   function buildCardsOrder() {
-    cards.order = buildPracticeOrder({
-      skipDone: state.settings.cSkipDone,
-      favOnly: state.settings.cFavOnly,
-      shuffle: state.settings.cShuffle,
-    });
+    const idx = buildPracticeOrder({ skipDone: state.settings.cSkipDone, favOnly: state.settings.cFavOnly });
+    cards.queue = idx.map((i) => state.vocab[i].id);
+    cards.total = cards.queue.length;
   }
-  function cardsRenderEmpty() {
-    const empty = cards.order.length === 0;
-    el.cEmptyState.hidden = !empty;
-    document.querySelector(".cards").hidden = empty;
+
+  function showCardsSession(active) {
+    const card = document.querySelector(".cards");
+    if (card) card.hidden = !active;
+    document.querySelectorAll("#view-cards .session-head, #view-cards .session-progress").forEach((n) => { n.hidden = !active; });
+    if (el.cProgress) el.cProgress.hidden = !active;
+    el.cEmptyState.hidden = active;
   }
-  function updateCardsProgress() { el.cProgress.textContent = `${cards.pos + 1} von ${cards.order.length}`; }
+
+  function updateCardsProgress() {
+    const n = Math.min(cards.pos + 1, cards.total);
+    if (el.cProgress) el.cProgress.textContent = cards.total ? `Karte ${n} von ${cards.total}` : "Keine Karten";
+    if (el.cProgressBar) el.cProgressBar.style.width = cards.total ? `${(cards.pos / cards.total) * 100}%` : "0%";
+  }
   function updateCardsScore() {
     const done = state.vocab.filter((v) => v.done).length;
     el.cScore.innerHTML = `Gelernt: <strong>${done}</strong> von ${state.vocab.length}`;
@@ -1715,18 +1757,18 @@
 
   function enterCards() {
     buildCardsOrder();
-    cards.pos = -1;
+    cards.pos = 0;
     updateCardsScore();
-    if (!cards.order.length) { cardsRenderEmpty(); return; }
-    el.cEmptyState.hidden = true;
-    document.querySelector(".cards").hidden = false;
-    cardsNext();
+    if (!cards.total) { showCardsSession(false); updateCardsProgress(); return; }
+    showCardsSession(true);
+    cardsShow();
   }
 
   function cardsShow() {
     const v = currentCardVocab(); if (!v) return;
     cards.flipped = false;
     el.flashcard.classList.remove("is-flipped");
+    resetCardTransform();
     const frontGerman = state.settings.cDir;
     el.cFrontLabel.textContent = frontGerman ? "Deutsch" : "Latein";
     el.cBackLabel.textContent = frontGerman ? "Latein" : "Deutsch";
@@ -1734,42 +1776,33 @@
     el.cBack.textContent = frontGerman ? v.latin : v.german;
     el.cForms.textContent = v.forms || "";
     el.cForms.hidden = !v.forms;
+    if (el.cPhaseBadge) el.cPhaseBadge.textContent = "Phase " + v.phase;
     updateCardsProgress();
   }
 
   function flipCard() { cards.flipped = !cards.flipped; el.flashcard.classList.toggle("is-flipped", cards.flipped); }
 
-  function cardsNext() {
-    if (synth) synth.cancel();
-    if (!cards.order.length) { buildCardsOrder(); cards.pos = -1; }
-    if (!cards.order.length) { cardsRenderEmpty(); return; }
-    cards.pos = (cards.pos + 1) % cards.order.length;
-    cardsShow();
-  }
-  function cardsPrev() {
-    if (synth) synth.cancel();
-    if (!cards.order.length) return;
-    cards.pos = (cards.pos - 1 + cards.order.length) % cards.order.length;
-    cardsShow();
+  function finishCardsSession() {
+    showCardsSession(false);
+    updateCardsProgress();
+    toast("Session abgeschlossen.");
+    setTimeout(() => { if (currentView === "cards") switchView("home"); }, 900);
   }
 
+  // Eine Karte bewerten (gewusst/nicht) -> Leitner-Update, dann nächste Karte.
   function cardsMark(known) {
     const v = currentCardVocab();
     if (v) {
-      recordReview(v, known);            // Leitner: gewusst -> Phase rauf, sonst Phase 1
+      recordReview(v, known);
       haptic(known ? "ok" : "wrong");
       markDone(v, known);
       renderList(); updateProgress();
     }
     updateCardsScore();
-    if (state.settings.cSkipDone && known) {
-      buildCardsOrder();
-      if (!cards.order.length) { cardsRenderEmpty(); return; }
-      if (cards.pos >= cards.order.length) cards.pos = 0;
-      cardsShow();              // an gleicher Position steht nun die nächste Karte
-    } else {
-      cardsNext();
-    }
+    cards.pos++;
+    if (cards.pos >= cards.total) { finishCardsSession(); return; }
+    if (synth) synth.cancel();
+    cardsShow();
   }
 
   function cardsHearFront(e) {
@@ -1777,6 +1810,67 @@
     const v = currentCardVocab(); if (!v) return;
     if (state.settings.cDir) speak(v.german, state.settings.germanVoiceURI, "de-DE");
     else speak(v.latin, state.settings.latinVoiceURI, "it-IT");
+  }
+
+  /* ---------- Flashcard-Gesten: Swipe links = noch üben, rechts = gewusst ---------- */
+  function setSwipeHint(dx) {
+    if (el.swipeHintRight) el.swipeHintRight.style.opacity = dx > 12 ? String(Math.min(1, dx / 90)) : "0";
+    if (el.swipeHintLeft) el.swipeHintLeft.style.opacity = dx < -12 ? String(Math.min(1, -dx / 90)) : "0";
+  }
+  function resetCardTransform() {
+    el.flashcard.classList.remove("animating");
+    el.flashcard.style.transform = "";
+    el.flashcard.style.opacity = "";
+    setSwipeHint(0);
+  }
+  function snapCardBack() {
+    el.flashcard.classList.add("animating");
+    el.flashcard.style.transform = "";
+    el.flashcard.style.opacity = "";
+    setSwipeHint(0);
+    setTimeout(() => el.flashcard.classList.remove("animating"), 200);
+  }
+  // Bewertung mit Wisch-Animation (auch von Buttons/Tastatur genutzt).
+  function swipeGrade(known) {
+    if (!currentCardVocab()) return;
+    el.flashcard.classList.add("animating");
+    el.flashcard.style.transform = `translateX(${known ? 140 : -140}%) rotate(${known ? 12 : -12}deg)`;
+    el.flashcard.style.opacity = "0";
+    setSwipeHint(0);
+    setTimeout(() => cardsMark(known), 200);
+  }
+
+  function bindFlashcardGestures() {
+    const card = el.flashcard;
+    if (!card) return;
+    const THRESH = 70;
+    card.addEventListener("pointerdown", (e) => {
+      if (e.button != null && e.button !== 0) return;
+      cardDrag = { x: e.clientX, y: e.clientY, moved: 0, t: Date.now() };
+      card.classList.remove("animating");
+      try { card.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    card.addEventListener("pointermove", (e) => {
+      if (!cardDrag) return;
+      const dx = e.clientX - cardDrag.x, dy = e.clientY - cardDrag.y;
+      cardDrag.moved = Math.max(cardDrag.moved, Math.abs(dx) + Math.abs(dy));
+      if (Math.abs(dx) > Math.abs(dy)) {
+        card.style.transform = `translateX(${dx}px) rotate(${dx * 0.05}deg)`;
+        card.style.opacity = String(1 - Math.min(Math.abs(dx) / 320, 0.4));
+        setSwipeHint(dx);
+      }
+    });
+    const end = (e) => {
+      if (!cardDrag) return;
+      const dx = e.clientX - cardDrag.x;
+      const drag = cardDrag; cardDrag = null;
+      try { card.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (Math.abs(dx) > THRESH) { swipeGrade(dx > 0); return; }
+      if (drag.moved < 8 && Date.now() - drag.t < 350) { resetCardTransform(); flipCard(); return; }
+      snapCardBack();
+    };
+    card.addEventListener("pointerup", end);
+    card.addEventListener("pointercancel", () => { if (cardDrag) { cardDrag = null; snapCardBack(); } });
   }
 
   /* ============================================================
@@ -1944,16 +2038,18 @@
   }
 
   /* ---------- Ansicht wechseln ---------- */
-  const VIEWS = ["home", "listen", "quiz", "write", "cards", "stats", "manage"];
-  const PRACTICE = new Set(["quiz", "write", "cards"]);
+  const VIEWS = ["home", "practice", "tests", "cards", "stats", "manage"];
 
-  function switchView(view) {
-    if (view === currentView || !VIEWS.includes(view)) return;
-    // Globaler Teardown des alten Modus
+  function teardownModes() {
     pause();
     if (recognitionOn) stopVoice();
     quizStopListen();
     if (synth) synth.cancel();
+  }
+
+  function switchView(view) {
+    if (view === currentView || !VIEWS.includes(view)) return;
+    teardownModes();
 
     currentView = view;
     VIEWS.forEach((v) => { const node = document.getElementById("view-" + v); if (node) node.hidden = v !== view; });
@@ -1965,13 +2061,82 @@
     });
 
     if (view === "home") updateHome();
-    else if (view === "quiz") enterQuiz();
-    else if (view === "write") enterWrite();
+    else if (view === "practice") enterPractice();
+    else if (view === "tests") renderTests();
     else if (view === "cards") enterCards();
     else if (view === "stats") renderStats();
-    else if (view === "listen" && !player.playing && player.pos < 0) setNpState("", "Bereit");
 
     updateWakeLock();
+  }
+
+  /* ---------- Tab „Übungen": Untermodi Hören / Sprechen / Schreiben ---------- */
+  function enterPractice() {
+    updateScopeBar();
+    setPracticeMode(practiceMode);
+  }
+
+  function setPracticeMode(mode) {
+    practiceMode = mode;
+    teardownModes();
+    document.querySelectorAll(".seg").forEach((s) => {
+      const on = s.dataset.mode === mode;
+      s.classList.toggle("is-active", on);
+      s.setAttribute("aria-selected", String(on));
+    });
+    ["listen", "quiz", "write"].forEach((m) => {
+      const n = document.getElementById("sub-" + m);
+      if (n) n.hidden = m !== mode;
+    });
+    if (mode === "quiz") enterQuiz();
+    else if (mode === "write") enterWrite();
+    else if (!player.playing && player.pos < 0) setNpState("", "Bereit");
+    updateWakeLock();
+  }
+
+  function updateScopeBar() {
+    if (!el.scopeBar) return;
+    el.scopeBar.hidden = !practiceScope;
+    if (practiceScope && el.scopeLabel) el.scopeLabel.textContent = practiceScope.label || "";
+  }
+
+  /* ---------- Tab „Tests": gezielte Abfrage einer Auswahl ---------- */
+  function testSelectionIndices() {
+    const gid = el.testGroup ? el.testGroup.value : "all";
+    const fav = el.testFavOnly && el.testFavOnly.checked;
+    return state.vocab
+      .map((_, i) => i)
+      .filter((i) => (gid === "all" || String(state.vocab[i].groupId) === String(gid)) && (!fav || state.vocab[i].fav));
+  }
+
+  function updateTestCount() {
+    if (!el.testCount) return;
+    const n = testSelectionIndices().length;
+    el.testCount.textContent = `${n} ${n === 1 ? "Vokabel" : "Vokabeln"} ausgewählt`;
+  }
+
+  function renderTests() {
+    if (el.testGroup) {
+      const cur = el.testGroup.value || "all";
+      el.testGroup.innerHTML = '<option value="all">Alle Vokabeln</option>';
+      state.groups.forEach((g) => {
+        const o = document.createElement("option");
+        o.value = String(g.id); o.textContent = `${g.name} (${g.count})`;
+        el.testGroup.appendChild(o);
+      });
+      el.testGroup.value = state.groups.some((g) => String(g.id) === cur) ? cur : "all";
+    }
+    updateTestCount();
+  }
+
+  function startTest(cat) {
+    const sel = testSelectionIndices();
+    if (!sel.length) { toast("Keine Vokabeln in dieser Auswahl."); return; }
+    const gid = el.testGroup ? el.testGroup.value : "all";
+    const g = state.groups.find((x) => String(x.id) === String(gid));
+    const name = gid === "all" ? "Alle Vokabeln" : (g ? g.name : "Auswahl");
+    practiceScope = { groupId: gid, favOnly: !!(el.testFavOnly && el.testFavOnly.checked), label: `${name} · ${sel.length}` };
+    practiceMode = cat;
+    switchView("practice");
   }
 
   /* ---------- Dashboard / Start (Gamification) ---------- */

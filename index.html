@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Audio-Vokabeltrainer für Latein – hören, lernen, abhaken." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Vokabeltrainer mit Leitner-System – lernen, hören, abfragen." />
   <meta name="theme-color" content="#faf9f5" />
   <title>Vokabeltrainer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -27,12 +27,10 @@
 
   <main id="main" class="wrap">
 
-    <nav class="tabs" role="tablist" aria-label="Modus">
+    <nav class="tabs" role="tablist" aria-label="Bereich">
       <button class="tab is-active" type="button" role="tab" aria-selected="true" data-view="home">Start</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-view="listen">Hören</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-view="quiz">Sprechen</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-view="write">Schreiben</button>
-      <button class="tab" type="button" role="tab" aria-selected="false" data-view="cards">Karten</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="practice">Übungen</button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-view="tests">Tests</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="stats">Fortschritt</button>
       <button class="tab" type="button" role="tab" aria-selected="false" data-view="manage">Vokabeln</button>
     </nav>
@@ -40,21 +38,21 @@
     <!-- Start / Dashboard -->
     <div id="view-home" class="view">
       <section class="card home-hero">
-        <p class="home-hello" id="homeGreeting">Willkommen!</p>
+        <p class="home-hello" id="homeGreeting">Willkommen</p>
         <p class="home-sub">Bereit für deine heutige Lern-Session?</p>
-        <button id="homeStartBtn" class="btn btn-soft home-cta" type="button">Jetzt lernen · <span id="homeDue">0</span> fällig</button>
+        <button id="homeStartBtn" class="btn btn-soft home-cta" type="button">Jetzt lernen<span class="home-cta-sep" aria-hidden="true">·</span><span id="homeDue">0</span> fällig</button>
         <p class="home-today" id="homeToday"></p>
       </section>
 
       <section class="home-tiles">
         <div class="home-tile">
           <div class="home-tile-num" id="homeStreak">0</div>
-          <div class="home-tile-label">Tage in Serie 🔥</div>
+          <div class="home-tile-label">Tage in Serie</div>
           <div class="home-tile-sub" id="homeStreakSub"></div>
         </div>
         <div class="home-tile">
           <div class="home-tile-num" id="homeXp">0</div>
-          <div class="home-tile-label">XP ⭐</div>
+          <div class="home-tile-label">XP</div>
           <div class="home-tile-sub" id="homeLevel">Level 1</div>
         </div>
         <div class="home-tile">
@@ -71,41 +69,218 @@
       </section>
     </div><!-- /view-home -->
 
-    <div id="view-listen" class="view" hidden>
-    <!-- Player -->
-    <section class="card player" aria-label="Wiedergabe">
-      <div class="now-playing" id="nowPlaying">
-        <p class="np-label" id="npLabel">Bereit</p>
-        <p class="np-latin" id="npLatin">—</p>
-        <p class="np-german" id="npGerman"></p>
-        <p class="np-forms" id="npForms"></p>
+    <!-- Übungen: Hören / Sprechen / Schreiben -->
+    <div id="view-practice" class="view" hidden>
+      <div class="segmented" role="tablist" aria-label="Übungsart">
+        <button class="seg is-active" type="button" role="tab" aria-selected="true" data-mode="listen">Hören</button>
+        <button class="seg" type="button" role="tab" aria-selected="false" data-mode="quiz">Sprechen</button>
+        <button class="seg" type="button" role="tab" aria-selected="false" data-mode="write">Schreiben</button>
       </div>
 
-      <div class="progress" aria-hidden="true">
-        <div class="progress-bar" id="progressBar"></div>
-      </div>
-      <p class="progress-text" id="progressText" aria-live="polite">0 von 0</p>
-
-      <div class="controls">
-        <button id="prevBtn" class="ctrl" type="button" aria-label="Vorherige Vokabel" title="Zurück"></button>
-        <button id="playBtn" class="ctrl ctrl-primary" type="button" aria-label="Abspielen"></button>
-        <button id="nextBtn" class="ctrl" type="button" aria-label="Nächste Vokabel" title="Weiter"></button>
+      <div id="scopeBar" class="scope-bar" hidden>
+        <span class="scope-text">Test: <strong id="scopeLabel"></strong></span>
+        <button id="scopeExit" class="btn btn-ghost btn-sm" type="button">Test beenden</button>
       </div>
 
-      <div class="player-toggles">
-        <label class="chip"><input type="checkbox" id="shuffleToggle" /> Zufall</label>
-        <label class="chip"><input type="checkbox" id="loopToggle" /> Wiederholen</label>
-        <label class="chip"><input type="checkbox" id="readFormsToggle" /> Formen vorlesen</label>
-        <label class="chip"><input type="checkbox" id="beepToggle" /> Signalton</label>
-        <label class="chip" id="voiceChip"><input type="checkbox" id="voiceToggle" /> Sprachsteuerung</label>
-        <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
-        <label class="chip"><input type="checkbox" id="favToggle" /> Nur Favoriten</label>
-      </div>
-    </section>
-    </div><!-- /view-listen -->
+      <!-- Hören -->
+      <div id="sub-listen" class="submode">
+        <section class="card player" aria-label="Wiedergabe">
+          <div class="now-playing" id="nowPlaying">
+            <p class="np-label" id="npLabel">Bereit</p>
+            <p class="np-latin" id="npLatin">—</p>
+            <p class="np-german" id="npGerman"></p>
+            <p class="np-forms" id="npForms"></p>
+          </div>
 
+          <div class="progress" aria-hidden="true">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+          <p class="progress-text" id="progressText" aria-live="polite">0 von 0</p>
+
+          <div class="controls">
+            <button id="prevBtn" class="ctrl" type="button" aria-label="Vorherige Vokabel" title="Zurück"></button>
+            <button id="playBtn" class="ctrl ctrl-primary" type="button" aria-label="Abspielen"></button>
+            <button id="nextBtn" class="ctrl" type="button" aria-label="Nächste Vokabel" title="Weiter"></button>
+          </div>
+
+          <div class="player-toggles">
+            <label class="chip"><input type="checkbox" id="shuffleToggle" /> Zufall</label>
+            <label class="chip"><input type="checkbox" id="loopToggle" /> Wiederholen</label>
+            <label class="chip"><input type="checkbox" id="readFormsToggle" /> Formen vorlesen</label>
+            <label class="chip"><input type="checkbox" id="beepToggle" /> Signalton</label>
+            <label class="chip" id="voiceChip"><input type="checkbox" id="voiceToggle" /> Sprachsteuerung</label>
+            <label class="chip"><input type="checkbox" id="skipDoneToggle" checked /> Abgehakte überspringen</label>
+            <label class="chip"><input type="checkbox" id="favToggle" /> Nur Favoriten</label>
+          </div>
+        </section>
+      </div><!-- /sub-listen -->
+
+      <!-- Sprechen -->
+      <div id="sub-quiz" class="submode" hidden>
+        <section class="card quiz" aria-label="Abfrage">
+          <p class="q-progress" id="qProgress" aria-live="polite">0 von 0</p>
+
+          <div class="q-prompt">
+            <p class="q-hint" id="qHint">Übersetze ins Deutsche</p>
+            <p class="q-latin" id="qLatin">—</p>
+            <button id="qHearLatin" class="q-hear" type="button" aria-label="Lateinisches Wort anhören" title="Anhören"></button>
+          </div>
+
+          <p class="q-status" id="qStatus">Tippe auf das Mikrofon und sprich die Übersetzung.</p>
+          <p class="q-transcript" id="qTranscript" aria-live="polite"></p>
+          <p class="q-answer" id="qAnswer" hidden></p>
+
+          <div class="q-controls">
+            <button id="qSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
+            <button id="qMicBtn" class="q-mic" type="button" aria-label="Antwort sprechen"></button>
+            <button id="qNextBtn" class="btn btn-ghost" type="button">Weiter</button>
+          </div>
+
+          <form class="q-type" id="qTypeForm">
+            <input type="text" id="qTypeInput" class="q-type-input" placeholder="… oder Antwort tippen" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            <button type="submit" class="btn btn-ghost">Prüfen</button>
+          </form>
+
+          <details class="card-options">
+            <summary>Optionen</summary>
+            <div class="q-toggles">
+              <label class="chip"><input type="checkbox" id="qShuffleToggle" /> Zufall</label>
+              <label class="chip"><input type="checkbox" id="qAutoToggle" checked /> Auto-Mikrofon</label>
+              <label class="chip"><input type="checkbox" id="qWakeToggle" checked /> Bildschirm anlassen</label>
+              <label class="chip"><input type="checkbox" id="qSkipDoneToggle" /> Gelernte überspringen</label>
+              <label class="chip"><input type="checkbox" id="qFavToggle" /> Nur Favoriten</label>
+            </div>
+          </details>
+
+          <div class="q-score" id="qScore"></div>
+        </section>
+        <p class="empty-state" id="qEmptyState" hidden>
+          Noch keine Vokabeln. Lege im Tab „Vokabeln“ welche an oder importiere eine Liste.
+        </p>
+      </div><!-- /sub-quiz -->
+
+      <!-- Schreiben -->
+      <div id="sub-write" class="submode" hidden>
+        <section class="card quiz write" aria-label="Schriftliche Abfrage">
+          <p class="q-progress" id="wProgress" aria-live="polite">0 von 0</p>
+
+          <div class="q-prompt">
+            <p class="q-hint" id="wHint">Übersetze ins Deutsche</p>
+            <p class="q-latin" id="wPrompt">—</p>
+            <button id="wHear" class="q-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
+          </div>
+
+          <form class="w-form" id="wForm">
+            <input type="text" id="wInput" class="w-input" placeholder="Übersetzung eingeben" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            <button type="submit" id="wCheckBtn" class="btn btn-soft">Prüfen</button>
+          </form>
+
+          <p class="q-status" id="wStatus">Tippe die Übersetzung und drücke Enter.</p>
+          <p class="q-answer" id="wAnswer" hidden></p>
+
+          <div class="w-controls">
+            <button id="wSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
+            <button id="wNextBtn" class="btn btn-ghost" type="button">Weiter</button>
+          </div>
+
+          <details class="card-options">
+            <summary>Optionen</summary>
+            <div class="q-toggles">
+              <label class="chip"><input type="checkbox" id="wDirToggle" /> Deutsch → Latein</label>
+              <label class="chip"><input type="checkbox" id="wShuffleToggle" /> Zufall</label>
+              <label class="chip"><input type="checkbox" id="wSkipDoneToggle" /> Gelernte überspringen</label>
+              <label class="chip"><input type="checkbox" id="wFavToggle" /> Nur Favoriten</label>
+            </div>
+          </details>
+
+          <div class="q-score" id="wScore"></div>
+        </section>
+        <p class="empty-state" id="wEmptyState" hidden>
+          Noch keine Vokabeln. Lege im Tab „Vokabeln“ welche an oder importiere eine Liste.
+        </p>
+      </div><!-- /sub-write -->
+    </div><!-- /view-practice -->
+
+    <!-- Tests -->
+    <div id="view-tests" class="view" hidden>
+      <section class="card">
+        <h2 class="stats-h">Gezielter Test</h2>
+        <p class="hint">Wähle eine Lektion und eine Abfrageart. Geprüft werden alle Vokabeln der Auswahl – unabhängig vom Wiederholungsplan.</p>
+
+        <div class="test-form">
+          <label class="dlg-field">
+            <span>Lektion / Gruppe</span>
+            <select id="testGroup"><option value="all">Alle Vokabeln</option></select>
+          </label>
+          <label class="chip test-fav"><input type="checkbox" id="testFavOnly" /> Nur Favoriten</label>
+          <p class="test-count" id="testCount">0 Vokabeln ausgewählt</p>
+        </div>
+
+        <p class="test-cats-label">Abfrageart wählen und starten:</p>
+        <div class="test-cats">
+          <button class="btn btn-soft" type="button" data-cat="listen">Hören</button>
+          <button class="btn btn-soft" type="button" data-cat="quiz">Sprechen</button>
+          <button class="btn btn-soft" type="button" data-cat="write">Schreiben</button>
+        </div>
+      </section>
+    </div><!-- /view-tests -->
+
+    <!-- Karteikarten (über den Start-CTA erreichbar) -->
+    <div id="view-cards" class="view" hidden>
+      <div class="session-head">
+        <button id="cBackBtn" class="btn btn-ghost btn-sm" type="button">Zurück</button>
+        <span class="session-phase" id="cPhaseBadge">Phase 1</span>
+      </div>
+      <div class="session-progress" aria-hidden="true"><div class="session-progress-bar" id="cProgressBar"></div></div>
+      <p class="q-progress" id="cProgress" aria-live="polite">Karte 0 von 0</p>
+
+      <section class="cards" aria-label="Karteikarten">
+        <div class="flashcard" id="flashcard" tabindex="0" role="button" aria-label="Karte umdrehen">
+          <div class="flash-inner" id="flashInner">
+            <div class="flash-face flash-front">
+              <p class="flash-label" id="cFrontLabel">Latein</p>
+              <p class="flash-text" id="cFront">—</p>
+              <button id="cHearFront" class="q-hear flash-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
+            </div>
+            <div class="flash-face flash-back">
+              <p class="flash-label" id="cBackLabel">Deutsch</p>
+              <p class="flash-text" id="cBack"></p>
+              <p class="flash-forms" id="cForms"></p>
+            </div>
+          </div>
+          <span class="swipe-hint swipe-hint-left" id="swipeHintLeft" aria-hidden="true">Noch üben</span>
+          <span class="swipe-hint swipe-hint-right" id="swipeHintRight" aria-hidden="true">Gewusst</span>
+        </div>
+        <p class="flash-hint">Tippen zum Umdrehen · nach rechts wischen = gewusst · nach links = noch üben</p>
+
+        <div class="cards-controls">
+          <button id="cUnknownBtn" class="btn btn-ghost card-action" type="button">Noch üben</button>
+          <button id="cKnownBtn" class="btn btn-soft card-action" type="button">Gewusst</button>
+        </div>
+
+        <details class="card-options">
+          <summary>Optionen</summary>
+          <div class="q-toggles">
+            <label class="chip"><input type="checkbox" id="cDirToggle" /> Deutsch zuerst</label>
+            <label class="chip"><input type="checkbox" id="cSkipDoneToggle" /> Gelernte überspringen</label>
+            <label class="chip"><input type="checkbox" id="cFavToggle" /> Nur Favoriten</label>
+          </div>
+        </details>
+
+        <div class="q-score" id="cScore"></div>
+      </section>
+      <p class="empty-state" id="cEmptyState" hidden>
+        Keine fälligen Karten. Schau später wieder vorbei oder starte einen Test.
+      </p>
+    </div><!-- /view-cards -->
+
+    <!-- Fortschritt -->
+    <div id="view-stats" class="view" hidden>
+      <div id="statsContent" class="stats-content"></div>
+    </div><!-- /view-stats -->
+
+    <!-- Vokabeln -->
     <div id="view-manage" class="view" hidden>
-    <!-- Settings -->
     <details class="card settings">
       <summary>Einstellungen</summary>
       <div class="settings-grid">
@@ -141,11 +316,9 @@
           <label class="chip"><input type="checkbox" id="hapticsToggle" /> Vibration bei richtig/falsch (mobil)</label>
         </div>
       </div>
-      <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur: <kbd>Leertaste</kbd> Play / Pause, <kbd>←</kbd> <kbd>→</kbd> blättern.<br>
-        Sprachbefehle (Mikrofon nötig): „gewusst“ = abhaken &amp; weiter · „nicht gewusst“ = weiter ohne Haken · „nochmal“ · „weiter“ / „zurück“ · „stopp“ / „los“.</p>
+      <p class="hint">Für Latein klingt eine italienische Stimme am natürlichsten. Tastatur in den Karten: <kbd>Leertaste</kbd> umdrehen, <kbd>←</kbd> noch üben, <kbd>→</kbd> gewusst.</p>
     </details>
 
-    <!-- Vocab list -->
     <section class="card list-card" aria-label="Vokabelliste">
       <div class="list-head">
         <h2>Vokabeln <span class="count-pill" id="countPill">0</span><span class="count-pill fav-pill" id="favCount" title="Favoriten"></span></h2>
@@ -188,129 +361,6 @@
       </p>
     </section>
     </div><!-- /view-manage -->
-
-    <div id="view-quiz" class="view" hidden>
-      <section class="card quiz" aria-label="Abfrage">
-        <p class="q-progress" id="qProgress" aria-live="polite">0 von 0</p>
-
-        <div class="q-prompt">
-          <p class="q-hint" id="qHint">Übersetze ins Deutsche</p>
-          <p class="q-latin" id="qLatin">—</p>
-          <button id="qHearLatin" class="q-hear" type="button" aria-label="Lateinisches Wort anhören" title="Anhören"></button>
-        </div>
-
-        <p class="q-status" id="qStatus">Tippe auf das Mikrofon und sprich die Übersetzung.</p>
-        <p class="q-transcript" id="qTranscript" aria-live="polite"></p>
-        <p class="q-answer" id="qAnswer" hidden></p>
-
-        <div class="q-controls">
-          <button id="qSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
-          <button id="qMicBtn" class="q-mic" type="button" aria-label="Antwort sprechen"></button>
-          <button id="qNextBtn" class="btn btn-ghost" type="button">Weiter</button>
-        </div>
-
-        <form class="q-type" id="qTypeForm">
-          <input type="text" id="qTypeInput" class="q-type-input" placeholder="… oder Antwort tippen" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <button type="submit" class="btn btn-ghost">Prüfen</button>
-        </form>
-
-        <div class="q-toggles">
-          <label class="chip"><input type="checkbox" id="qShuffleToggle" /> Zufall</label>
-          <label class="chip"><input type="checkbox" id="qAutoToggle" checked /> Auto-Mikrofon</label>
-          <label class="chip"><input type="checkbox" id="qWakeToggle" checked /> Bildschirm anlassen</label>
-          <label class="chip"><input type="checkbox" id="qSkipDoneToggle" /> Gelernte überspringen</label>
-          <label class="chip"><input type="checkbox" id="qFavToggle" /> Nur Favoriten</label>
-        </div>
-
-        <div class="q-score" id="qScore"></div>
-      </section>
-
-      <p class="empty-state" id="qEmptyState" hidden>
-        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
-      </p>
-    </div><!-- /view-quiz -->
-
-    <div id="view-write" class="view" hidden>
-      <section class="card quiz write" aria-label="Schriftliche Abfrage">
-        <p class="q-progress" id="wProgress" aria-live="polite">0 von 0</p>
-
-        <div class="q-prompt">
-          <p class="q-hint" id="wHint">Übersetze ins Deutsche</p>
-          <p class="q-latin" id="wPrompt">—</p>
-          <button id="wHear" class="q-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
-        </div>
-
-        <form class="w-form" id="wForm">
-          <input type="text" id="wInput" class="w-input" placeholder="Übersetzung eingeben" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-          <button type="submit" id="wCheckBtn" class="btn btn-soft">Prüfen</button>
-        </form>
-
-        <p class="q-status" id="wStatus">Tippe die Übersetzung und drücke Enter.</p>
-        <p class="q-answer" id="wAnswer" hidden></p>
-
-        <div class="w-controls">
-          <button id="wSolveBtn" class="btn btn-ghost" type="button">Lösung</button>
-          <button id="wNextBtn" class="btn btn-ghost" type="button">Weiter</button>
-        </div>
-
-        <div class="q-toggles">
-          <label class="chip"><input type="checkbox" id="wDirToggle" /> Deutsch → Latein</label>
-          <label class="chip"><input type="checkbox" id="wShuffleToggle" /> Zufall</label>
-          <label class="chip"><input type="checkbox" id="wSkipDoneToggle" /> Gelernte überspringen</label>
-          <label class="chip"><input type="checkbox" id="wFavToggle" /> Nur Favoriten</label>
-        </div>
-
-        <div class="q-score" id="wScore"></div>
-      </section>
-      <p class="empty-state" id="wEmptyState" hidden>
-        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
-      </p>
-    </div><!-- /view-write -->
-
-    <div id="view-cards" class="view" hidden>
-      <section class="card cards" aria-label="Karteikarten">
-        <p class="q-progress" id="cProgress" aria-live="polite">0 von 0</p>
-
-        <div class="flashcard" id="flashcard" tabindex="0" role="button" aria-label="Karte umdrehen">
-          <div class="flash-inner" id="flashInner">
-            <div class="flash-face flash-front">
-              <p class="flash-label" id="cFrontLabel">Latein</p>
-              <p class="flash-text" id="cFront">—</p>
-              <button id="cHearFront" class="q-hear flash-hear" type="button" aria-label="Wort anhören" title="Anhören"></button>
-            </div>
-            <div class="flash-face flash-back">
-              <p class="flash-label" id="cBackLabel">Deutsch</p>
-              <p class="flash-text" id="cBack"></p>
-              <p class="flash-forms" id="cForms"></p>
-            </div>
-          </div>
-        </div>
-        <p class="flash-hint">Tippen zum Umdrehen · wischen für vor/zurück</p>
-
-        <div class="cards-controls">
-          <button id="cPrevBtn" class="ctrl" type="button" aria-label="Vorherige Karte" title="Zurück"></button>
-          <button id="cUnknownBtn" class="btn btn-ghost" type="button">Noch üben</button>
-          <button id="cKnownBtn" class="btn btn-soft" type="button">Gewusst</button>
-          <button id="cNextBtn" class="ctrl" type="button" aria-label="Nächste Karte" title="Weiter"></button>
-        </div>
-
-        <div class="q-toggles">
-          <label class="chip"><input type="checkbox" id="cDirToggle" /> Deutsch zuerst</label>
-          <label class="chip"><input type="checkbox" id="cShuffleToggle" /> Zufall</label>
-          <label class="chip"><input type="checkbox" id="cSkipDoneToggle" /> Gelernte überspringen</label>
-          <label class="chip"><input type="checkbox" id="cFavToggle" /> Nur Favoriten</label>
-        </div>
-
-        <div class="q-score" id="cScore"></div>
-      </section>
-      <p class="empty-state" id="cEmptyState" hidden>
-        Noch keine Vokabeln. Wechsle zu „Hören“ und lade ein Beispiel oder importiere eine Liste.
-      </p>
-    </div><!-- /view-cards -->
-
-    <div id="view-stats" class="view" hidden>
-      <div id="statsContent" class="stats-content"></div>
-    </div><!-- /view-stats -->
   </main>
 
   <footer class="site-footer wrap">
@@ -320,7 +370,7 @@
   <!-- Onboarding (Namensabfrage für neue Nutzer) -->
   <dialog id="onboardDialog" class="edit-dialog">
     <form method="dialog" id="onboardForm">
-      <h3>Willkommen! 👋</h3>
+      <h3>Willkommen</h3>
       <p class="dlg-text">Wie sollen wir dich nennen?</p>
       <label class="dlg-field">
         <span>Dein Name</span>
