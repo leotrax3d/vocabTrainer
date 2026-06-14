@@ -22,8 +22,9 @@
   --shadow: 0 1px 2px rgba(20,20,19,.05);
   --radius: 14px;
   --radius-sm: 9px;
-  --serif: "Lora", Georgia, "Times New Roman", serif;   /* Fließtext / Inhalte */
-  --sans: "Poppins", Arial, Helvetica, sans-serif;      /* Überschriften / UI */
+  /* Eine konsistente, professionelle Sans (Inter) für die gesamte UI */
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 [data-theme="dark"] {
@@ -298,7 +299,7 @@ kbd {
 
 .fav-pill { color: var(--fav); }
 .fav-pill:empty { display: none; }
-.fav-pill:not(:empty)::before { content: "★ "; }
+.fav-pill:not(:empty)::before { content: "Favoriten: "; font-weight: 500; color: var(--text-faint); }
 
 .vi-empty { list-style: none; text-align: center; color: var(--text-faint); padding: 26px 10px; font-size: .92rem; }
 
@@ -484,6 +485,74 @@ kbd {
 }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 6px); } }
 
+/* ---------- Segmented control (Übungen) ---------- */
+.segmented {
+  display: flex; gap: 4px; padding: 4px; margin: 22px 0 0;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+}
+.seg {
+  flex: 1; border: none; background: transparent; cursor: pointer;
+  font-family: var(--sans); font-size: .9rem; font-weight: 500; color: var(--text-soft);
+  padding: 9px 10px; border-radius: 999px; transition: background .15s, color .15s;
+}
+.seg:hover { color: var(--text); }
+.seg.is-active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Test-Hinweisleiste (aktiver gezielter Test) ---------- */
+.scope-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 14px 0 0; padding: 10px 14px;
+  background: var(--accent-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.scope-text { font-family: var(--sans); font-size: .85rem; color: var(--text); }
+
+/* ---------- Tests ---------- */
+.test-form { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.test-fav { align-self: flex-start; }
+.test-count { margin: 0; font-family: var(--sans); font-size: .85rem; color: var(--text-soft); }
+.test-cats-label { margin: 22px 0 10px; font-family: var(--sans); font-size: .85rem; color: var(--text-soft); }
+.test-cats { display: flex; gap: 10px; flex-wrap: wrap; }
+.test-cats .btn { flex: 1; min-width: 110px; }
+
+/* ---------- Karten-Session: Kopf, Phase, Fortschritt ---------- */
+#view-cards { max-width: 520px; margin: 0 auto; }
+.session-head { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; }
+.session-phase {
+  font-family: var(--sans); font-size: .72rem; font-weight: 600; letter-spacing: .04em;
+  color: var(--text-soft); background: var(--surface-2); border: 1px solid var(--border);
+  padding: 5px 11px; border-radius: 999px;
+}
+.session-progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin: 12px 0 2px; }
+.session-progress-bar { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+#view-cards .q-progress { margin: 6px 0 0; }
+
+/* ---------- Flashcard: Gesten & Animation ---------- */
+.flashcard { position: relative; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.flashcard:active { cursor: grabbing; }
+.flashcard.animating { transition: transform .2s ease, opacity .2s ease; }
+.swipe-hint {
+  position: absolute; top: 14px; padding: 6px 12px; border-radius: 999px; opacity: 0;
+  font-family: var(--sans); font-size: .72rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; pointer-events: none; transition: opacity .12s ease; z-index: 2;
+}
+.swipe-hint-right { right: 14px; background: var(--green); color: #fff; }
+.swipe-hint-left { left: 14px; background: var(--accent); color: #fff; }
+.card-action { min-width: 132px; }
+
+/* ---------- Eingeklappte Zusatz-Optionen ---------- */
+.card-options { margin-top: 16px; border-top: 1px solid var(--border); }
+.card-options > summary {
+  cursor: pointer; list-style: none; padding: 12px 2px 2px; text-align: center;
+  font-family: var(--sans); font-size: .8rem; color: var(--text-faint);
+}
+.card-options > summary::-webkit-details-marker { display: none; }
+.card-options[open] > summary { color: var(--text-soft); }
+.card-options .q-toggles { margin-top: 12px; }
+
+/* ---------- Home-CTA ---------- */
+.home-cta-sep { margin: 0 9px; opacity: .5; }
+
 /* ---------- Mobile ---------- */
 @media (max-width: 560px) {
   .wrap { padding: 0 18px; }
@@ -503,6 +572,10 @@ kbd {
   .phase-name { font-size: .72rem; }
   .home-tile-num { font-size: 1.5rem; }
   .home-hello { font-size: 1.4rem; }
+  .seg { font-size: .84rem; padding: 9px 6px; }
+  .test-cats { flex-direction: column; }
+  .test-cats .btn { min-width: 0; }
+  .card-action { min-width: 120px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
